@@ -19,6 +19,8 @@ permissions:
 
 jobs:
   build:
+    # Reported as the "CI" status check, which the main branch ruleset requires.
+    name: CI
     runs-on: ubuntu-24.04
     permissions:
       contents: read
