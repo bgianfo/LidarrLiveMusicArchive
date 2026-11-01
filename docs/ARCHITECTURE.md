@@ -331,6 +331,26 @@ file's write time. The long lifetime is a safety net for changes the listing mis
 When a request fails after its retries, any cached copy is returned regardless of age, and a warning
 is logged. Only data never fetched before is unavailable during an outage.
 
+Responses are also checked for plausibility before they are used or cached. On 2026-11-01 the scrape API
+cached responses by field list and ignored the query, so queries returned other queries' results, and at
+times nothing at all, with status 200. The checks:
+
+| Request | Rejected when |
+|---|---|
+| Collection listing | rows are present but none belongs to the requested collection; or it is empty while the cached copy has rows |
+| Creator search | it finds no item whose creator is the artist, while the cached copy did |
+| Item metadata | it describes a different item, or none |
+
+A rejected response is never cached. The cached copy is used if there is one; otherwise the request
+counts as failed (item metadata) or as finding nothing (listings, creator search). Each scrape query also
+asks for its fields in an order derived from the query text, which keeps different queries apart in a
+cache keyed that way. The order is fixed per query, so the plugin's own cache keys are stable.
+
+The creator search compares names after removing case, accents, punctuation and a leading "The", and
+searches for the name without "The" and with straight apostrophes. archive.org lists "Disco Biscuits"
+where MusicBrainz has "The Disco Biscuits", and a phrase search alone also matches tribute acts
+("Chum, A Tribute to Phish").
+
 Jitter is derived from a hash of the URL. It is stable per URL and spread across URLs, so a catalogue
 cached in one refresh does not expire on a single day.
 
