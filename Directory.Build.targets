@@ -1,0 +1,53 @@
+<Project>
+  <!--
+    Build plumbing shared by the plugin and its tests:
+      * fetches Lidarr's assemblies (the plugin's host references) before they are resolved;
+      * lets the net8.0 tests run on a newer runtime when .NET 8 isn't installed;
+      * packages the plugin as the zip Lidarr's installer expects when built with -p:PackagePlugin=true.
+  -->
+
+  <PropertyGroup>
+    <_IsPluginProject Condition="'$(MSBuildProjectName)'=='Lidarr.Plugin.LiveMusicArchive'">true</_IsPluginProject>
+  </PropertyGroup>
+
+  <!-- Lidarr runs on .NET 8, and CI tests on it; locally, a machine with only a newer runtime can still run the tests. -->
+  <PropertyGroup Condition="'$(MSBuildProjectName)'=='Lidarr.Plugin.LiveMusicArchive.Tests'">
+    <RollForward>Major</RollForward>
+  </PropertyGroup>
+
+  <!--
+    Downloads the pinned Lidarr release once into .refs/<version>/ and verifies its hash. Only the plugin project
+    fetches; the test project references it, so the assemblies are in place before the tests resolve theirs.
+    The marker file is written last, so an interrupted download is retried rather than half-used.
+  -->
+  <Target Name="FetchLidarrAssemblies"
+          BeforeTargets="ResolveAssemblyReferences"
+          Condition="'$(_IsPluginProject)'=='true' and !Exists('$(LidarrRefsRoot)/.complete')">
+    <Message Importance="high" Text="Downloading Lidarr $(LidarrVersion) assemblies from $(LidarrPackageUrl)" />
+    <RemoveDir Directories="$(LidarrRefsRoot)" />
+    <DownloadFile SourceUrl="$(LidarrPackageUrl)" DestinationFolder="$(LidarrRefsRoot)" DestinationFileName="$(LidarrPackageName)" Retries="3" />
+    <VerifyFileHash File="$(LidarrRefsRoot)/$(LidarrPackageName)" Hash="$(LidarrPackageSha256)" />
+    <Unzip SourceFiles="$(LidarrRefsRoot)/$(LidarrPackageName)" DestinationFolder="$(LidarrRefsRoot)" Include="Lidarr/*.dll" />
+    <Delete Files="$(LidarrRefsRoot)/$(LidarrPackageName)" />
+    <Touch Files="$(LidarrRefsRoot)/.complete" AlwaysCreate="true" />
+  </Target>
+
+  <!--
+    dotnet build -c Release -p:PackagePlugin=true writes dist/LidarrLiveMusicArchive-v<version>.<framework>.zip with the plugin
+    files at its root (Lidarr picks the asset containing "<framework>.zip" and unpacks it into plugins/<owner>/<repo>),
+    plus dist/VERSION and dist/LIDARR_VERSION for the release workflow.
+  -->
+  <Target Name="PackagePlugin" AfterTargets="Build" Condition="'$(PackagePlugin)'=='true' and '$(_IsPluginProject)'=='true'">
+    <PropertyGroup>
+      <_DistDir>$(MSBuildThisFileDirectory)dist/</_DistDir>
+      <_StageDir>$(IntermediateOutputPath)package/</_StageDir>
+    </PropertyGroup>
+    <RemoveDir Directories="$(_StageDir);$(_DistDir)" />
+    <MakeDir Directories="$(_DistDir)" />
+    <Copy SourceFiles="$(TargetPath);$(TargetDir)$(TargetName).pdb;$(TargetDir)$(TargetName).deps.json" DestinationFolder="$(_StageDir)" />
+    <ZipDirectory SourceDirectory="$(_StageDir)" DestinationFile="$(_DistDir)LidarrLiveMusicArchive-v$(Version).$(TargetFramework).zip" />
+    <WriteLinesToFile File="$(_DistDir)VERSION" Lines="$(Version)" Overwrite="true" />
+    <WriteLinesToFile File="$(_DistDir)LIDARR_VERSION" Lines="$(LidarrVersion)" Overwrite="true" />
+    <Message Importance="high" Text="package: $(_DistDir)LidarrLiveMusicArchive-v$(Version).$(TargetFramework).zip (built against Lidarr $(LidarrVersion))" />
+  </Target>
+</Project>

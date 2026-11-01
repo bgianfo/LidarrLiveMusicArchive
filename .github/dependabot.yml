@@ -1,0 +1,14 @@
+# Keeps the workflow actions and NuGet packages (MinVer, test libraries) current. The plugin's host
+# references are Lidarr's own assemblies, pinned in Directory.Build.props rather than on NuGet.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+  - package-ecosystem: nuget
+    directories:
+      - /src/Lidarr.Plugin.LiveMusicArchive
+      - /tests/Lidarr.Plugin.LiveMusicArchive.Tests
+    schedule:
+      interval: monthly

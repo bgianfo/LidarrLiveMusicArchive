@@ -1,0 +1,34 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <IsPackable>false</IsPackable>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <!-- Test names are self-describing sentences; don't require XML docs on each one. -->
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />
+    <PackageReference Include="Microsoft.Extensions.TimeProvider.Testing" Version="8.10.0" />
+    <PackageReference Include="NSubstitute" Version="5.1.0" />
+    <!-- NSubstitute's Castle.Core pulls EventLog 6.0; Lidarr's assemblies are built against 8.0, so lift it to match. -->
+    <PackageReference Include="System.Diagnostics.EventLog" Version="8.0.2" />
+    <PackageReference Include="xunit" Version="2.9.2" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../src/Lidarr.Plugin.LiveMusicArchive/Lidarr.Plugin.LiveMusicArchive.csproj" />
+    <!-- Tests run outside Lidarr, so copy the host assemblies that the code under test touches. -->
+    <Reference Include="$(LidarrRefs)/Lidarr.Core.dll" />
+    <Reference Include="$(LidarrRefs)/Lidarr.Common.dll" />
+    <Reference Include="$(LidarrRefs)/Newtonsoft.Json.dll" />
+    <Reference Include="$(LidarrRefs)/NLog.dll" />
+    <Reference Include="$(LidarrRefs)/FluentValidation.dll" />
+    <Reference Include="$(LidarrRefs)/Equ.dll" />
+    <Reference Include="$(LidarrRefs)/Diacritical.dll" />
+    <Reference Include="$(LidarrRefs)/Dapper.dll" />
+    <Reference Include="$(LidarrRefs)/DryIoc.dll" />
+    <Reference Include="$(LidarrRefs)/TagLibSharp.dll" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Fixtures/*.json;Fixtures/*.mp3" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>
