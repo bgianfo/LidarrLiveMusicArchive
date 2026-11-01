@@ -58,7 +58,8 @@ The `release` job then:
 
 ## How Lidarr picks a release
 
-These rules come from Lidarr's `PluginService` on the `plugins` branch, and the workflow is shaped by them:
+These rules come from Lidarr's `PluginService` (part of regular Lidarr since plugin support was merged from the old
+`plugins` branch, unchanged), and the workflow is shaped by them:
 
 - The asset name must contain `net8.0.zip`. It is unpacked into `plugins/<owner>/<repo>/`.
 - A plain repository URL only matches releases whose target branch is `main` or `master`. Releases from another

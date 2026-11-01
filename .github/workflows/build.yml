@@ -146,7 +146,8 @@ jobs:
           cat > notes.md <<EOF
           ## Install
 
-          In Lidarr (plugins branch), open **System → Plugins**, enter \`$url\` and click **Install**, then restart Lidarr.
+          Requires Lidarr $lidarr or newer. In Lidarr, open **System → Plugins**, enter \`$url\` and click **Install**,
+          then restart Lidarr.
 
           **Minimum Lidarr Version:** $lidarr
           EOF
