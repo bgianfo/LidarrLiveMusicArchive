@@ -73,13 +73,13 @@ jobs:
           valid=$(grep -o -m1 'lines-valid="[0-9]*"' coverage.cobertura.xml | grep -o '[0-9]*')
           echo "### Line coverage: $(awk "BEGIN { printf \"%.1f\", $rate * 100 }")% ($covered of $valid lines)" >> "$GITHUB_STEP_SUMMARY"
 
-      # Pushes to main give the baseline that pull requests are compared against. Fork pull requests can't
-      # upload (no code-quality permission), and tags aren't compared, so both are skipped. GitHub Code Quality
-      # is only offered on Team and Enterprise Cloud plans; where it isn't enabled the upload 404s, so a failed
-      # upload is a warning rather than a failed build.
+      # Pushes to main give the baseline that pull requests are compared against. Fork and Dependabot pull
+      # requests get a read-only token (no code-quality permission), and tags aren't compared, so all three are
+      # skipped. GitHub Code Quality is only offered on Team and Enterprise Cloud plans; where it isn't enabled
+      # the upload 404s, so a failed upload is a warning rather than a failed build.
       - name: Upload coverage
         if: >-
-          !startsWith(github.ref, 'refs/tags/') &&
+          !startsWith(github.ref, 'refs/tags/') && github.actor != 'dependabot[bot]' &&
           (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
         uses: actions/upload-code-coverage@v1
         with:
