@@ -17,8 +17,11 @@ namespace Lidarr.Plugin.LiveMusicArchive.Core.Downloads
         bool IsRunning(string folder);
 
         /// <summary>
-        /// Stops a running download, if any, and waits briefly for it to finish. Once this returns, the download
-        /// writes nothing more to its folder, even if it is still unwinding, so the folder can be deleted.
+        /// Stops a running download, if any, and waits for it to finish. Short writes (creating folders, tagging,
+        /// saving the manifest) share a lock with this method: one in progress completes before it returns, and
+        /// later ones are skipped. A file transfer stops at its next read, and the HTTP client checks for
+        /// cancellation before it creates, opens or moves a file. If the download is still running after
+        /// a timeout (10 s), which needs a request that ignores cancellation, this returns anyway.
         /// </summary>
         /// <param name="folder">The download folder.</param>
         void Cancel(string folder);
@@ -110,9 +113,13 @@ namespace Lidarr.Plugin.LiveMusicArchive.Core.Downloads
 
                 // Tagging changes the files, so it happens only once everything is verified. If Lidarr stops
                 // before the manifest is saved, the next run re-downloads the (now mismatching) files.
+                // Each tag is a short write under the guard, so Cancel waits for one in progress and skips the rest.
                 foreach (var file in manifest.Files)
                 {
-                    _tagger.Tag(DownloadManifest.LocalPath(folder, file.Name), manifest);
+                    if (!guard.Write(() => _tagger.Tag(DownloadManifest.LocalPath(folder, file.Name), manifest)))
+                    {
+                        throw new OperationCanceledException(cancellationToken);
+                    }
                 }
 
                 manifest.Completed = true;

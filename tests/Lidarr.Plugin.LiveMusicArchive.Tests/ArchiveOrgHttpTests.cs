@@ -163,6 +163,19 @@ namespace Lidarr.Plugin.LiveMusicArchive.Tests
         }
 
         [Fact]
+        public async Task a_cancelled_download_creates_no_folder()
+        {
+            var dest = Path.Combine(_folder, "deleted", "t01.flac");
+            using var cancel = new CancellationTokenSource();
+            cancel.Cancel();
+            var handler = new FakeHandler(_ => Bytes("abc", HttpStatusCode.OK, "\"v1\""));
+
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => _clock.Run(Http(handler).DownloadFileAsync("https://archive.org/download/x/t01.flac", dest, cancel.Token)));
+
+            Assert.False(Directory.Exists(Path.Combine(_folder, "deleted")));
+        }
+
+        [Fact]
         public async Task restricted_files_fail_without_retrying()
         {
             var handler = new FakeHandler(_ => new HttpResponseMessage(HttpStatusCode.Unauthorized));
