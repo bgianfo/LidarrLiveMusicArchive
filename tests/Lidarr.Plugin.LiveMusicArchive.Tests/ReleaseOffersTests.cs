@@ -79,6 +79,7 @@ namespace Lidarr.Plugin.LiveMusicArchive.Tests
         [InlineData("1969-11-07: Fillmore West, San Francisco, CA, USA")]
         [InlineData("1966\u201003\u201025: Troupers Hall, Los Angeles, CA, USA")]
         [InlineData("1977-05-08")]
+        [InlineData("2007-11-26: Belly Up Tavern, Solana Beach (San Diego), CA")]
         public void lidarr_matches_the_title_to_the_searched_album(string albumTitle)
         {
             var artist = new Artist { Metadata = new ArtistMetadata { Name = "Grateful Dead" } };
@@ -115,6 +116,45 @@ namespace Lidarr.Plugin.LiveMusicArchive.Tests
         {
             Assert.Empty(ReleaseOffers.TorrentFromItem(TestData.Item(TestData.StreamOnlyFlacItem), "Grateful Dead", Cornell));
             Assert.Empty(ReleaseOffers.TorrentFromItem(TestData.SyntheticItem("x", new { name = "t01.mp3", format = "VBR MP3" }), "Grateful Dead", Cornell));
+        }
+
+        [Fact]
+        public void aac_m4a_recordings_are_offered_as_aac()
+        {
+            var offer = Assert.Single(ReleaseOffers.FromItem(TestData.Item(TestData.M4aOnlyItem), "José González", "2006-09-08: Fine Line, Minneapolis MN"));
+
+            Assert.Contains("[AAC]", offer.Title);
+            Assert.Equal("AAC", offer.Codec);
+            Assert.Equal("M4A", offer.Container);
+            Assert.Equal(Quality.AAC_VBR, QualityParser.ParseQuality(offer.Title, null, 0).Quality);
+        }
+
+        [Fact]
+        public void lossless_m4a_is_tagged_alac()
+        {
+            // ~1,000 kbps: 3 minutes of CD-quality ALAC.
+            var item = TestData.SyntheticItem("x", new { name = "t01.m4a", format = "MPEG-4 Audio", size = "22500000", length = "180" });
+
+            var offer = Assert.Single(ReleaseOffers.FromItem(item, "Artist", "2006-09-08: Venue"));
+
+            Assert.Contains("[ALAC]", offer.Title);
+            Assert.Equal(Quality.ALAC, QualityParser.ParseQuality(offer.Title, null, 0).Quality);
+        }
+
+        [Theory]
+        [InlineData("José González", "2007-11-26: Belly Up Tavern, Solana Beach (San Diego), CA")]
+        [InlineData("Béla Fleck and the Flecktones", "1992-08-01: Café Wha?, New York, NY")]
+        [InlineData("Sigur Rós", "2005-10-01: Ráðhús, Reykjavík")]
+        public void lidarr_matches_titles_of_artists_and_venues_with_accents(string artistName, string albumTitle)
+        {
+            var artist = new Artist { Metadata = new ArtistMetadata { Name = artistName } };
+            var album = new Album { Title = albumTitle };
+            var title = ReleaseOffers.FromItem(Item("Flac"), artistName, albumTitle)[0].Title;
+
+            var parsed = Parser.ParseAlbumTitleWithSearchCriteria(title, artist, new List<Album> { album });
+
+            Assert.NotNull(parsed);
+            Assert.Equal(Quality.FLAC, parsed.Quality.Quality);
         }
 
         private static Newtonsoft.Json.Linq.JObject Item(string format) =>

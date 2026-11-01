@@ -1,5 +1,6 @@
 using System.Globalization;
 using Newtonsoft.Json.Linq;
+using NzbDrone.Common.Extensions;
 using NzbDrone.Core.Parser.Model;
 
 namespace Lidarr.Plugin.LiveMusicArchive.Core
@@ -14,7 +15,10 @@ namespace Lidarr.Plugin.LiveMusicArchive.Core
         public const string FormatParameter = "lma-format";
 
         // Formats worth offering; tiny 64k MP3s and Ogg derivatives only clutter results.
-        private static readonly string[] OfferedFormats = { "Flac", "24bit Flac", "VBR MP3" };
+        private static readonly string[] OfferedFormats = { "Flac", "24bit Flac", "VBR MP3", AudioFiles.MPEG4Audio };
+
+        // ALAC is lossless (typically 700–1,100 kbps for CD audio); AAC rarely exceeds 320.
+        private const int AlacBitrateThreshold = 600;
 
         /// <summary>
         /// The indexer results for one recording.
@@ -40,18 +44,19 @@ namespace Lidarr.Plugin.LiveMusicArchive.Core
 
             return AudioFiles.DownloadableFormats(item)
                 .Where(OfferedFormats.Contains)
-                .Select(format => new ReleaseInfo
+                .Select(format => (Format: format, Files: AudioFiles.ForFormat(item, format)))
+                .Select(x => new ReleaseInfo
                 {
-                    Guid = $"archiveorg-{identifier}-{format.Replace(' ', '-').ToLowerInvariant()}",
-                    Title = Title(artistName, albumTitle, lineage, format, identifier),
+                    Guid = $"archiveorg-{identifier}-{x.Format.Replace(' ', '-').ToLowerInvariant()}",
+                    Title = Title(artistName, albumTitle, lineage, QualityTag(x.Format, x.Files), identifier),
                     Artist = artistName,
                     Album = albumTitle,
-                    Size = AudioFiles.ForFormat(item, format).Sum(f => f.Size),
-                    DownloadUrl = DownloadUrl(identifier, format),
+                    Size = x.Files.Sum(f => f.Size),
+                    DownloadUrl = DownloadUrl(identifier, x.Format),
                     InfoUrl = $"https://archive.org/details/{Uri.EscapeDataString(identifier)}",
                     PublishDate = published,
-                    Codec = format.Contains("Flac", StringComparison.Ordinal) ? "FLAC" : "MP3",
-                    Container = format.Contains("Flac", StringComparison.Ordinal) ? "FLAC" : "MP3"
+                    Codec = QualityTag(x.Format, x.Files).Split(' ')[0],
+                    Container = x.Format == AudioFiles.MPEG4Audio ? "M4A" : x.Format.Contains("Flac", StringComparison.Ordinal) ? "FLAC" : "MP3"
                 })
                 .ToList();
         }
@@ -81,14 +86,14 @@ namespace Lidarr.Plugin.LiveMusicArchive.Core
             }
 
             var lineage = ShowMapper.Lineage(identifier, string.Join(" ", IaJson.All(metadata["source"])));
-            var tags = new[] { lineage, QualityTag(best), identifier, "torrent" }.Where(t => t != null).Select(t => $"[{t}]");
+            var tags = new[] { lineage, QualityTag(best, AudioFiles.ForFormat(item, best)), identifier, "torrent" }.Where(t => t != null).Select(t => $"[{t}]");
 
             return new List<ReleaseInfo>
             {
                 new TorrentInfo
                 {
                     Guid = $"archiveorg-{identifier}-torrent",
-                    Title = $"{artistName} - {albumTitle} {string.Join(" ", tags)}",
+                    Title = $"{TitleName(artistName)} - {TitleName(albumTitle)} {string.Join(" ", tags)}",
                     Artist = artistName,
                     Album = albumTitle,
                     Size = files.Sum(f => long.TryParse(IaJson.First(f["size"]), NumberStyles.Integer, CultureInfo.InvariantCulture, out var s) ? s : 0),
@@ -104,6 +109,15 @@ namespace Lidarr.Plugin.LiveMusicArchive.Core
 
         /// <summary>The tag Lidarr's quality parser understands for an archive.org format.</summary>
         /// <param name="format">An archive.org format label.</param>
+        /// <param name="files">The files in that format; needed only for MPEG-4 Audio, which is AAC or ALAC.</param>
+        /// <returns>For example "FLAC", "FLAC 24bit", "MP3 VBR V0", "AAC" or "ALAC".</returns>
+        public static string QualityTag(string format, IReadOnlyCollection<AudioFile> files) =>
+            format == AudioFiles.MPEG4Audio
+                ? (AverageKbps(files) >= AlacBitrateThreshold ? "ALAC" : "AAC")
+                : QualityTag(format);
+
+        /// <summary>The tag Lidarr's quality parser understands for an archive.org format.</summary>
+        /// <param name="format">An archive.org format label.</param>
         /// <returns>For example "FLAC", "FLAC 24bit" or "MP3 VBR V0".</returns>
         public static string QualityTag(string format) => format switch
         {
@@ -113,8 +127,19 @@ namespace Lidarr.Plugin.LiveMusicArchive.Core
             // reads imported archive.org MP3s (MP3-VBR-V0), so search results and files on disk compare equal
             // and Lidarr doesn't refuse grabs or chase "upgrades" between them.
             "VBR MP3" => "MP3 VBR V0",
+            // Lidarr reads the exact AAC or ALAC quality from the files on import; plain AAC parses as AAC-VBR.
+            AudioFiles.MPEG4Audio => "AAC",
             _ => format
         };
+
+        /// <summary>Average bitrate of a set of files from their sizes and lengths.</summary>
+        /// <param name="files">The files.</param>
+        /// <returns>Kilobits per second, or 0 when lengths are unknown.</returns>
+        internal static int AverageKbps(IReadOnlyCollection<AudioFile> files)
+        {
+            var milliseconds = files?.Sum(f => (long)f.DurationMs) ?? 0;
+            return milliseconds > 0 ? (int)(files.Sum(f => f.Size) * 8 / milliseconds) : 0;
+        }
 
         /// <summary>Builds the URL handed from the indexer to the download client.</summary>
         /// <param name="identifier">The archive.org identifier.</param>
@@ -148,11 +173,16 @@ namespace Lidarr.Plugin.LiveMusicArchive.Core
             return identifier.Length > 0 && !identifier.Contains('/') && format != null;
         }
 
-        private static string Title(string artistName, string albumTitle, string lineage, string format, string identifier)
+        private static string Title(string artistName, string albumTitle, string lineage, string qualityTag, string identifier)
         {
-            var tags = new[] { lineage, QualityTag(format), identifier }.Where(t => t != null).Select(t => $"[{t}]");
-            return $"{artistName} - {albumTitle} {string.Join(" ", tags)}";
+            var tags = new[] { lineage, qualityTag, identifier }.Where(t => t != null).Select(t => $"[{t}]");
+            return $"{TitleName(artistName)} - {TitleName(albumTitle)} {string.Join(" ", tags)}";
         }
+
+        // During a search Lidarr looks for the artist and album names in the title with accents removed
+        // (Parser.ParseAlbumTitleWithSearchCriteria applies RemoveAccent to the names, not to the title), so
+        // "José González" in a title never matches. Using Lidarr's own RemoveAccent keeps both sides identical.
+        private static string TitleName(string name) => name.RemoveAccent();
 
         private static DateTime ParsePublishDate(string value) =>
             DateTime.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal, out var date)

@@ -251,6 +251,39 @@ namespace Lidarr.Plugin.LiveMusicArchive.Tests
         }
 
         [Fact]
+        public void a_show_with_no_importable_audio_is_not_listed_again()
+        {
+            var shorten = TestData.SyntheticItem("gd77-05-07.x", new { name = "t01.shn", format = "Shorten" });
+            _client.GetItemMetadata("gd77-05-07.x", Arg.Any<DateTimeOffset?>()).Returns(shorten);
+
+            Assert.Empty(_service.BuildShow(TestData.Artist(), "1977-05-07", Options("")).Releases);
+
+            var artist = TestData.Artist();
+            _service.AddShows(artist, Options(""));
+            var titles = ((JArray)artist["Albums"]).Select(a => a.Value<string>("Title")).ToList();
+            Assert.DoesNotContain(titles, t => t.StartsWith("1977-05-07", StringComparison.Ordinal));
+            Assert.Contains(titles, t => t.StartsWith("1977-05-08", StringComparison.Ordinal));
+        }
+
+        [Fact]
+        public void an_unplayable_show_returns_when_archive_org_adds_a_recording()
+        {
+            _client.GetItemMetadata("gd77-05-07.x", Arg.Any<DateTimeOffset?>()).Returns(TestData.SyntheticItem("gd77-05-07.x", new { name = "t01.shn", format = "Shorten" }));
+            _service.BuildShow(TestData.Artist(), "1977-05-07", Options(""));
+            _client.GetRecordings("GratefulDead").Returns(new List<RecordingSummary>
+            {
+                TestData.Recording("gd77-05-07.x", "1977-05-07"),
+                TestData.Recording("gd77-05-07.new", "1977-05-07", downloads: 10)
+            });
+            _service = NewService();
+
+            var artist = TestData.Artist();
+            _service.AddShows(artist, Options(""));
+
+            Assert.Contains(((JArray)artist["Albums"]).Select(a => a.Value<string>("Title")), t => t.StartsWith("1977-05-07", StringComparison.Ordinal));
+        }
+
+        [Fact]
         public void a_show_never_saved_and_not_listed_is_gone() =>
             Assert.Null(_service.BuildShow(TestData.Artist(), "1977-05-06", Options("")));
 

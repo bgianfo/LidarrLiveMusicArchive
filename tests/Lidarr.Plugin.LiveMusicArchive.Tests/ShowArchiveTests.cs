@@ -63,6 +63,28 @@ namespace Lidarr.Plugin.LiveMusicArchive.Tests
             Assert.Equal("lma-b", Assert.Single(_archive.Load(SyntheticIds.AlbumId(TestData.GratefulDead, "1977-05-08")).Releases).Id);
         }
 
+        [Fact]
+        public void a_show_stays_unplayable_until_a_new_recording_appears()
+        {
+            var id = SyntheticIds.AlbumId(TestData.GratefulDead, "1977-05-08");
+            _archive.MarkUnplayable(id, new[] { "a", "b" });
+
+            Assert.True(_archive.IsUnplayable(id, new[] { "a", "b" }));
+            Assert.True(_archive.IsUnplayable(id, new[] { "b" }));
+            Assert.False(_archive.IsUnplayable(id, new[] { "a", "c" }));
+
+            _archive.ClearUnplayable(id);
+            Assert.False(_archive.IsUnplayable(id, new[] { "a" }));
+        }
+
+        [Fact]
+        public void unplayable_marks_ignore_non_synthetic_ids()
+        {
+            _archive.MarkUnplayable("../../x", new[] { "a" });
+
+            Assert.False(_archive.IsUnplayable("../../x", new[] { "a" }));
+        }
+
         private static AlbumResource Show(string date, string identifier) => new()
         {
             Id = SyntheticIds.AlbumId(TestData.GratefulDead, date),
