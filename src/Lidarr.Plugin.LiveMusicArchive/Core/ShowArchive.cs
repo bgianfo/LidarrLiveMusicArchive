@@ -69,7 +69,7 @@ namespace Lidarr.Plugin.LiveMusicArchive.Core
         {
             try
             {
-                return JsonConvert.DeserializeObject<AlbumResource>(File.ReadAllText(path));
+                return JsonConvert.DeserializeObject<AlbumResource>(File.ReadAllText(path), IaJson.LenientSettings);
             }
             catch (JsonException)
             {
