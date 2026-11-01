@@ -1,0 +1,9 @@
+.refs/
+.nuget/
+out/
+bin/
+obj/
+metadata-proxy/cache.db
+metadata-proxy/*.log
+spikes/*/out/
+dist/

@@ -1,0 +1,190 @@
+using Lidarr.Plugin.LiveMusicArchive.Core;
+using Lidarr.Plugin.LiveMusicArchive.Core.Downloads;
+using Lidarr.Plugin.LiveMusicArchive.Download;
+using NSubstitute;
+using NzbDrone.Common.Disk;
+using NzbDrone.Core.Configuration;
+using NzbDrone.Core.Download;
+using NzbDrone.Core.Localization;
+using NzbDrone.Core.Parser.Model;
+using NzbDrone.Core.RemotePathMappings;
+using Xunit;
+
+namespace Lidarr.Plugin.LiveMusicArchive.Tests
+{
+    public sealed class ArchiveOrgDownloadClientTests : IDisposable
+    {
+        private readonly string _root = Path.Combine(Path.GetTempPath(), "lma-tests-" + Guid.NewGuid().ToString("N"));
+        private readonly IArchiveOrgClient _client = Substitute.For<IArchiveOrgClient>();
+        private readonly IArchiveOrgDownloader _downloader = Substitute.For<IArchiveOrgDownloader>();
+        private readonly ArchiveOrgDownloadClient _downloadClient;
+
+        public ArchiveOrgDownloadClientTests()
+        {
+            _downloadClient = new ArchiveOrgDownloadClient(_client, _downloader, Substitute.For<IConfigService>(), Substitute.For<IDiskProvider>(),
+                Substitute.For<IRemotePathMappingService>(), Substitute.For<ILocalizationService>(), TestData.Logger)
+            {
+                Definition = new DownloadClientDefinition { Id = 3, Name = "LMA", Settings = new ArchiveOrgDownloadSettings { DownloadPath = _root } }
+            };
+            _client.GetItemMetadata(TestData.SoundboardItem).Returns(TestData.Item(TestData.SoundboardItem));
+        }
+
+        public void Dispose()
+        {
+            if (Directory.Exists(_root))
+            {
+                Directory.Delete(_root, true);
+            }
+        }
+
+        [Fact]
+        public async Task download_writes_a_manifest_and_starts_the_downloader()
+        {
+            var id = await _downloadClient.Download(Remote(ReleaseOffers.DownloadUrl(TestData.SoundboardItem, "VBR MP3")), null);
+
+            var folder = Assert.Single(Directory.GetDirectories(_root));
+            var manifest = DownloadManifest.Load(folder);
+            Assert.Equal(id, manifest.DownloadId);
+            Assert.Equal(TestData.SoundboardItem, manifest.Identifier);
+            Assert.Equal("VBR MP3", manifest.Format);
+            Assert.All(manifest.Files, f => Assert.EndsWith(".mp3", f.Name));
+            Assert.All(manifest.Files, f => Assert.NotNull(f.Md5));
+            _downloader.Received().Start(folder);
+        }
+
+        [Fact]
+        public async Task download_records_the_album_identity_to_tag_files_with()
+        {
+            var remote = Remote(ReleaseOffers.DownloadUrl(TestData.SoundboardItem, "VBR MP3"));
+            remote.Artist = new NzbDrone.Core.Music.Artist { Metadata = new NzbDrone.Core.Music.ArtistMetadata { Name = "Grateful Dead" } };
+            remote.Albums = new List<NzbDrone.Core.Music.Album> { new() { Title = "1977-05-08: Barton Hall", ForeignAlbumId = SyntheticIds.AlbumId(TestData.GratefulDead, "1977-05-08") } };
+
+            await _downloadClient.Download(remote, null);
+
+            var manifest = DownloadManifest.Load(Assert.Single(Directory.GetDirectories(_root)));
+            Assert.Equal("Grateful Dead", manifest.ArtistName);
+            Assert.Equal("1977-05-08: Barton Hall", manifest.AlbumTitle);
+            Assert.Equal(SyntheticIds.ReleaseId(TestData.SoundboardItem), manifest.ReleaseId);
+        }
+
+        [Fact]
+        public async Task musicbrainz_shows_get_no_synthetic_release_id()
+        {
+            var remote = Remote(ReleaseOffers.DownloadUrl(TestData.SoundboardItem, "VBR MP3"));
+            remote.Albums = new List<NzbDrone.Core.Music.Album> { new() { Title = "1969-11-07: Fillmore West", ForeignAlbumId = "ac3b135e-9c03-4639-a44e-bba6eb717694" } };
+
+            await _downloadClient.Download(remote, null);
+
+            var manifest = DownloadManifest.Load(Assert.Single(Directory.GetDirectories(_root)));
+            Assert.Null(manifest.ReleaseId);
+            Assert.Equal("ac3b135e-9c03-4639-a44e-bba6eb717694", manifest.AlbumId);
+        }
+
+        [Fact]
+        public async Task download_rejects_foreign_urls() =>
+            await Assert.ThrowsAsync<InvalidOperationException>(() => _downloadClient.Download(Remote("https://example.com/x.torrent"), null));
+
+        [Fact]
+        public async Task download_rejects_formats_the_item_does_not_have() =>
+            await Assert.ThrowsAsync<InvalidOperationException>(() => _downloadClient.Download(Remote(ReleaseOffers.DownloadUrl(TestData.SoundboardItem, "Flac")), null));
+
+        [Fact]
+        public void queue_reflects_each_download_folder_state()
+        {
+            Save("done", m => m.Completed = true);
+            Save("failed", m => m.Error = "Checksum mismatch");
+            Save("running", _ => { });
+            _downloader.IsRunning(Path.Combine(_root, "running")).Returns(true);
+            Directory.CreateDirectory(Path.Combine(_root, "not-ours"));
+
+            var items = _downloadClient.GetItems().ToDictionary(i => i.DownloadId);
+
+            Assert.Equal(3, items.Count);
+            Assert.Equal(DownloadItemStatus.Completed, items["done"].Status);
+            Assert.True(items["done"].CanMoveFiles);
+            Assert.Equal(0, items["done"].RemainingSize);
+            Assert.Equal(DownloadItemStatus.Failed, items["failed"].Status);
+            Assert.Equal("Checksum mismatch", items["failed"].Message);
+            Assert.Equal(DownloadItemStatus.Downloading, items["running"].Status);
+            Assert.False(items["running"].CanBeRemoved);
+            Assert.Equal(100, items["running"].RemainingSize);
+            _downloader.DidNotReceive().Start(Arg.Any<string>());
+        }
+
+        [Fact]
+        public void interrupted_downloads_resume_when_the_queue_is_read()
+        {
+            Save("interrupted", _ => { });
+
+            Assert.Single(_downloadClient.GetItems());
+
+            _downloader.Received().Start(Path.Combine(_root, "interrupted"));
+        }
+
+        [Fact]
+        public void removing_without_data_keeps_files_but_leaves_the_queue()
+        {
+            var folder = Save("done", m => m.Completed = true);
+            File.WriteAllText(Path.Combine(folder, "t01.mp3"), "audio");
+
+            _downloadClient.RemoveItem(_downloadClient.GetItems().Single(), deleteData: false);
+
+            Assert.Empty(_downloadClient.GetItems());
+            Assert.True(File.Exists(Path.Combine(folder, "t01.mp3")));
+            _downloader.Received().Cancel(folder);
+        }
+
+        [Fact]
+        public void status_reports_the_download_folder()
+        {
+            var status = _downloadClient.GetStatus();
+
+            Assert.True(status.IsLocalhost);
+            Assert.Equal(_root, Assert.Single(status.OutputRootFolders).FullPath.TrimEnd('/'));
+        }
+
+        [Fact]
+        public void test_requires_a_writable_download_path()
+        {
+            Assert.True(_downloadClient.Test().IsValid);
+
+            ((ArchiveOrgDownloadSettings)_downloadClient.Definition.Settings).DownloadPath = "";
+            Assert.False(_downloadClient.Test().IsValid);
+        }
+
+        [Fact]
+        public void folder_names_are_file_system_safe_and_unique()
+        {
+            var name = ArchiveOrgDownloadClient.FolderName("Grateful Dead - 1977-05-08: Barton Hall / Cornell? [FLAC]", "lma-abc");
+
+            Assert.Equal("Grateful Dead - 1977-05-08_ Barton Hall _ Cornell_ [FLAC] (lma-abc)", name);
+            Assert.True(ArchiveOrgDownloadClient.FolderName(new string('x', 400), "id").Length < 200);
+        }
+
+        [Fact]
+        public void download_ids_are_stable_per_recording_and_format()
+        {
+            Assert.Equal(ArchiveOrgDownloadClient.DownloadId("gd77", "Flac"), ArchiveOrgDownloadClient.DownloadId("gd77", "Flac"));
+            Assert.NotEqual(ArchiveOrgDownloadClient.DownloadId("gd77", "Flac"), ArchiveOrgDownloadClient.DownloadId("gd77", "VBR MP3"));
+            Assert.Matches("^lma-[0-9a-f]{16}$", ArchiveOrgDownloadClient.DownloadId("gd77", "Flac"));
+        }
+
+        private static RemoteAlbum Remote(string url) => new() { Release = new ReleaseInfo { Title = "Grateful Dead - 1977-05-08: Barton Hall [SBD] [MP3 VBR V0]", DownloadUrl = url } };
+
+        private string Save(string id, Action<DownloadManifest> configure)
+        {
+            var folder = Path.Combine(_root, id);
+            var manifest = new DownloadManifest
+            {
+                DownloadId = id,
+                Title = id,
+                Identifier = "gd77",
+                Format = "VBR MP3",
+                Files = new List<ManifestFile> { new() { Name = "t01.mp3", Size = 100 } }
+            };
+            configure(manifest);
+            manifest.Save(folder);
+            return folder;
+        }
+    }
+}

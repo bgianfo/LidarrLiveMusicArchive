@@ -1,0 +1,270 @@
+{
+ "id": "6faa7ca7-0d99-4a5e-bfa6-1fd5037520c6",
+ "artistname": "Grateful Dead",
+ "sortname": "Grateful Dead",
+ "artistaliases": [
+  "The Grateful Dead",
+  "Greatful Dead",
+  "Greatfull Dead"
+ ],
+ "disambiguation": "",
+ "overview": "",
+ "links": [
+  {
+   "target": "https://archive.org/details/GratefulDead",
+   "type": "archive"
+  },
+  {
+   "target": "http://www.deadbase.com/",
+   "type": "deadbase"
+  },
+  {
+   "target": "http://www.deaddisc.com/",
+   "type": "deaddisc"
+  },
+  {
+   "target": "https://www.discogs.com/artist/246650",
+   "type": "discogs"
+  },
+  {
+   "target": "http://musicmoz.org/Bands_and_Artists/G/Grateful_Dead/",
+   "type": "musicmoz"
+  },
+  {
+   "target": "https://www.bbc.co.uk/music/artists/6faa7ca7-0d99-4a5e-bfa6-1fd5037520c6",
+   "type": "bbc"
+  },
+  {
+   "target": "http://www.dead.net/",
+   "type": "dead"
+  },
+  {
+   "target": "https://www.allmusic.com/artist/mn0000988440",
+   "type": "allmusic"
+  },
+  {
+   "target": "https://www.youtube.com/user/gratefulvideo",
+   "type": "youtube"
+  },
+  {
+   "target": "https://www.facebook.com/gratefuldead",
+   "type": "facebook"
+  },
+  {
+   "target": "https://www.wikidata.org/wiki/Q212533",
+   "type": "wikidata"
+  },
+  {
+   "target": "https://rateyourmusic.com/artist/grateful_dead",
+   "type": "rateyourmusic"
+  },
+  {
+   "target": "https://open.spotify.com/artist/4TMHGUX5WI7OOm53PqSDAT",
+   "type": "spotify"
+  },
+  {
+   "target": "https://www.amazon.com/-/e/B000AR8M94",
+   "type": "amazon"
+  },
+  {
+   "target": "https://www.amazon.com/-/e/B000AR8M94",
+   "type": "amazon"
+  },
+  {
+   "target": "http://viaf.org/viaf/142214000",
+   "type": "viaf"
+  },
+  {
+   "target": "https://d-nb.info/gnd/5047761-4",
+   "type": "d-nb"
+  },
+  {
+   "target": "https://commons.wikimedia.org/wiki/File:Grateful_Dead_(1970).png",
+   "type": "wikimedia"
+  },
+  {
+   "target": "https://www.last.fm/music/Grateful+Dead",
+   "type": "last"
+  },
+  {
+   "target": "https://www.musik-sammler.de/artist/grateful-dead/",
+   "type": "musik-sammler"
+  },
+  {
+   "target": "http://id.loc.gov/authorities/names/n82217191",
+   "type": "loc"
+  },
+  {
+   "target": "https://www.worldcat.org/identities/lccn-n82217191",
+   "type": "worldcat"
+  },
+  {
+   "target": "https://catalogue.bnf.fr/ark:/12148/cb139037850",
+   "type": "bnf"
+  },
+  {
+   "target": "https://www.imdb.com/name/nm0335993/",
+   "type": "imdb"
+  },
+  {
+   "target": "https://www.songkick.com/artists/528035",
+   "type": "songkick"
+  },
+  {
+   "target": "http://snaccooperative.org/ark:/99166/w64569mv",
+   "type": "snaccooperative"
+  },
+  {
+   "target": "https://www.45cat.com/artist/grateful-dead",
+   "type": "45cat"
+  },
+  {
+   "target": "https://www.bandsintown.com/a/6461",
+   "type": "bandsintown"
+  },
+  {
+   "target": "https://www.setlist.fm/setlists/grateful-dead-bd6ad4a.html",
+   "type": "setlist"
+  },
+  {
+   "target": "https://www.whosampled.com/Grateful-Dead/",
+   "type": "whosampled"
+  },
+  {
+   "target": "https://secondhandsongs.com/artist/298",
+   "type": "secondhandsongs"
+  },
+  {
+   "target": "https://www.youtube.com/channel/UC9dWluHyEwvIj5NNs7KkJ0A",
+   "type": "youtube"
+  },
+  {
+   "target": "https://www.deezer.com/artist/1785",
+   "type": "deezer"
+  },
+  {
+   "target": "https://genius.com/artists/Grateful-dead",
+   "type": "genius"
+  },
+  {
+   "target": "https://imvdb.com/n/the-grateful-dead",
+   "type": "imvdb"
+  },
+  {
+   "target": "https://tidal.com/artist/222",
+   "type": "tidal"
+  },
+  {
+   "target": "https://www.instagram.com/gratefuldead/",
+   "type": "instagram"
+  },
+  {
+   "target": "https://soundcloud.com/gratefuldead",
+   "type": "soundcloud"
+  },
+  {
+   "target": "https://music.apple.com/us/artist/1273063",
+   "type": "apple"
+  },
+  {
+   "target": "https://music.apple.com/us/artist/1273063",
+   "type": "apple"
+  },
+  {
+   "target": "https://www.jazzmusicarchives.com/artist/grateful-dead",
+   "type": "jazzmusicarchives"
+  },
+  {
+   "target": "https://www.qobuz.com/us-en/interpreter/grateful-dead/160288",
+   "type": "qobuz"
+  },
+  {
+   "target": "https://www.qobuz.com/us-en/interpreter/grateful-dead/160288",
+   "type": "qobuz"
+  },
+  {
+   "target": "https://music.youtube.com/channel/UC9dWluHyEwvIj5NNs7KkJ0A",
+   "type": "youtube"
+  },
+  {
+   "target": "https://www.spirit-of-rock.com/en/band/Grateful_Dead",
+   "type": "spirit-of-rock"
+  },
+  {
+   "target": "https://open.qobuz.com/artist/160288",
+   "type": "qobuz"
+  },
+  {
+   "target": "https://open.qobuz.com/artist/160288",
+   "type": "qobuz"
+  }
+ ],
+ "images": [
+  {
+   "CoverType": "Logo",
+   "Url": "https://images.lidarr.audio/cache/https://assets.fanart.tv/fanart/grateful-dead-54da36fc42069.png",
+   "remoteUrl": "https://assets.fanart.tv/fanart/grateful-dead-54da36fc42069.png"
+  },
+  {
+   "CoverType": "Poster",
+   "Url": "https://images.lidarr.audio/cache/https://assets.fanart.tv/fanart/grateful-dead-4fe880af59ba6.jpg",
+   "remoteUrl": "https://assets.fanart.tv/fanart/grateful-dead-4fe880af59ba6.jpg"
+  },
+  {
+   "CoverType": "Banner",
+   "Url": "https://images.lidarr.audio/cache/https://assets.fanart.tv/fanart/grateful-dead-551302fed64cd.jpg",
+   "remoteUrl": "https://assets.fanart.tv/fanart/grateful-dead-551302fed64cd.jpg"
+  },
+  {
+   "CoverType": "Fanart",
+   "Url": "https://images.lidarr.audio/cache/https://assets.fanart.tv/fanart/grateful-dead-4fe88047522da.jpg",
+   "remoteUrl": "https://assets.fanart.tv/fanart/grateful-dead-4fe88047522da.jpg"
+  }
+ ],
+ "rating": {
+  "Count": 15,
+  "Value": 8.8
+ },
+ "status": "ended",
+ "genres": [
+  "Rock",
+  "Psychedelic Rock",
+  "Folk Rock",
+  "Jam Band",
+  "Country Rock",
+  "Roots Rock",
+  "Classic Rock",
+  "Blues Rock"
+ ],
+ "type": "Group",
+ "Albums": [
+  {
+   "Id": "ac3b135e-9c03-4639-a44e-bba6eb717694",
+   "OldIds": [],
+   "Title": "1969-11-07: Fillmore West, San Francisco, CA, USA",
+   "Type": "Album",
+   "SecondaryTypes": [
+    "Live"
+   ],
+   "ReleaseStatuses": [
+    "Bootleg"
+   ],
+   "ReleaseDate": null,
+   "Rating": null
+  },
+  {
+   "Id": "aa86ac85-a76a-4411-9605-c269215f52b5",
+   "OldIds": [],
+   "Title": "Touch of Grey",
+   "Type": "Single",
+   "SecondaryTypes": [],
+   "ReleaseStatuses": [
+    "Official",
+    "Promotion"
+   ],
+   "ReleaseDate": null,
+   "Rating": null
+  }
+ ],
+ "oldids": []
+}

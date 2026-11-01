@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <AssemblyName>Lidarr.Plugin.LiveMusicArchive</AssemblyName>
+    <RootNamespace>Lidarr.Plugin.LiveMusicArchive</RootNamespace>
+    <!-- MinVer derives the version from the nearest vX.Y.Z git tag; untagged commits get X.Y.(Z+1)-alpha.0.<height>. -->
+    <MinVerTagPrefix>v</MinVerTagPrefix>
+    <!-- Lidarr reads the installed version from the informational version; a "+<sha>" suffix makes it unparseable. -->
+    <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
+    <!-- Every public and internal member must be documented (CS1591), and warnings fail the build. -->
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="$(LidarrRefs)/Lidarr.Core.dll" Private="false" />
+    <Reference Include="$(LidarrRefs)/Lidarr.Common.dll" Private="false" />
+    <Reference Include="$(LidarrRefs)/NLog.dll" Private="false" />
+    <Reference Include="$(LidarrRefs)/Newtonsoft.Json.dll" Private="false" />
+    <Reference Include="$(LidarrRefs)/FluentValidation.dll" Private="false" />
+    <Reference Include="$(LidarrRefs)/TagLibSharp.dll" Private="false" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="MinVer" Version="8.0.0" PrivateAssets="all" />
+  </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="Lidarr.Plugin.LiveMusicArchive.Tests" />
+    <!-- Lets NSubstitute fake internal interfaces in tests. -->
+    <InternalsVisibleTo Include="DynamicProxyGenAssembly2" />
+  </ItemGroup>
+</Project>

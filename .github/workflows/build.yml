@@ -1,0 +1,131 @@
+# Builds, tests and packages the plugin on every push and pull request. Pushing a vX.Y.Z tag also publishes
+# a GitHub release in the shape Lidarr's plugin installer expects (see docs/RELEASING.md).
+name: Build
+
+on:
+  push:
+    branches: [main, master]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  # Never cancel a release halfway through publishing.
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # MinVer derives the version from the full tag history
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', 'Directory.Build.props') }}
+          restore-keys: nuget-${{ runner.os }}-
+
+      # Lidarr's assemblies (a ~140 MB release download), keyed on the pinned version in Directory.Build.props.
+      - uses: actions/cache@v4
+        with:
+          path: .refs
+          key: lidarr-refs-${{ hashFiles('Directory.Build.props') }}
+
+      - name: Build and package
+        run: dotnet build -c Release -p:PackagePlugin=true
+
+      - name: Check formatting
+        run: dotnet format --verify-no-changes --severity warn --no-restore
+
+      - name: Test
+        run: dotnet test -c Release --no-build
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: plugin
+          path: dist/
+          if-no-files-found: error
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # needed to find which branch contains the tag
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: plugin
+          path: dist
+
+      # MinVer takes the version from this tag; a mismatch means the tag isn't valid SemVer (e.g. v1.2) and was ignored.
+      - name: Check the tag is the built version
+        run: |
+          version=$(cat dist/VERSION)
+          if [ "$GITHUB_REF_NAME" != "v$version" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME built as version $version; release tags must be vMAJOR.MINOR.PATCH[-prerelease]"
+            exit 1
+          fi
+          echo "VERSION=$version" >> "$GITHUB_ENV"
+
+      # Lidarr only offers releases whose target branch is main/master to a plain repo URL; releases on any
+      # other branch are opt-in with ".../tree/<branch>". So the release must record the branch the tag is on.
+      - name: Find the release branch
+        run: |
+          branches=$(git branch -r --contains "$GITHUB_SHA" --format '%(refname:lstrip=3)' | grep -v '^HEAD$' || true)
+          branch=$(echo "$branches" | grep -m1 -xE 'main|master' || echo "$branches" | head -n1)
+          if [ -z "$branch" ]; then
+            echo "::error::$GITHUB_REF_NAME is not on any pushed branch; push the branch before the tag"
+            exit 1
+          fi
+          echo "Releasing $GITHUB_REF_NAME from branch $branch"
+          echo "BRANCH=$branch" >> "$GITHUB_ENV"
+
+      - name: Write release notes
+        run: |
+          lidarr=$(cat dist/LIDARR_VERSION)
+          # Lidarr skips releases whose "Minimum Lidarr Version" (four-part) is newer than the running build.
+          if ! [[ "$lidarr" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::Unexpected Lidarr version '$lidarr' from the build image label"
+            exit 1
+          fi
+          url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY"
+          case "$BRANCH" in main|master) ;; *) url="$url/tree/$BRANCH" ;; esac
+          cat > notes.md <<EOF
+          ## Install
+
+          In Lidarr (plugins branch), open **System → Plugins**, enter \`$url\` and click **Install**, then restart Lidarr.
+
+          **Minimum Lidarr Version:** $lidarr
+          EOF
+
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          flags=()
+          # A suffixed version (0.4.0-beta.1) or a non-default branch is a prerelease and is never marked latest.
+          if [[ "$VERSION" == *-* || ! "$BRANCH" =~ ^(main|master)$ ]]; then
+            flags+=(--prerelease --latest=false)
+          fi
+          gh release create "$GITHUB_REF_NAME" dist/*.zip \
+            --verify-tag \
+            --target "$BRANCH" \
+            --title "LidarrLiveMusicArchive $VERSION" \
+            --notes-file notes.md \
+            --generate-notes \
+            "${flags[@]}"

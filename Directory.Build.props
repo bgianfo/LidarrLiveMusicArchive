@@ -1,0 +1,23 @@
+<Project>
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <LangVersion>12.0</LangVersion>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>disable</Nullable>
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+  </PropertyGroup>
+  <PropertyGroup>
+    <!--
+      The Lidarr release the plugin compiles against. Its assemblies are downloaded from Lidarr's GitHub release on
+      the first build (see Directory.Build.targets), and it is published as the release's minimum Lidarr version.
+      To move to a newer Lidarr, change both values; the hash is the sha256 of LidarrPackageName.
+    -->
+    <LidarrVersion>3.1.6.5079</LidarrVersion>
+    <LidarrPackageSha256>449a74d839436381d3b1d0bb094b2d807e0309b844a2fbd2a2e82ccc26d05272</LidarrPackageSha256>
+    <!-- The managed assemblies are the same on every platform; the Windows zip is the one MSBuild can unpack itself. -->
+    <LidarrPackageName>Lidarr.master.$(LidarrVersion).windows-core-x64.zip</LidarrPackageName>
+    <LidarrPackageUrl>https://github.com/Lidarr/Lidarr/releases/download/v$(LidarrVersion)/$(LidarrPackageName)</LidarrPackageUrl>
+    <LidarrRefsRoot>$(MSBuildThisFileDirectory).refs/$(LidarrVersion)</LidarrRefsRoot>
+    <LidarrRefs Condition="'$(LidarrRefs)'==''">$(LidarrRefsRoot)/Lidarr</LidarrRefs>
+  </PropertyGroup>
+</Project>
