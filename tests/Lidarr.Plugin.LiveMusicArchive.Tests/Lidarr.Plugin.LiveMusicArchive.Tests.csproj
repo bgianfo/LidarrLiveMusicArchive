@@ -12,7 +12,7 @@
     <!-- NSubstitute's Castle.Core pulls EventLog 6.0; Lidarr's assemblies are built against 8.0, so lift it to match. -->
     <PackageReference Include="System.Diagnostics.EventLog" Version="8.0.2" />
     <PackageReference Include="xunit" Version="2.9.2" />
-    <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="4.0.1" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="../../src/Lidarr.Plugin.LiveMusicArchive/Lidarr.Plugin.LiveMusicArchive.csproj" />
