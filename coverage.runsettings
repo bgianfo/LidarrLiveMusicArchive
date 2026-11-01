@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Code coverage for `dotnet test -collect:"Code Coverage" -settings coverage.runsettings`, written as Cobertura XML
+  for GitHub's code coverage (see .github/workflows/build.yml). Only the plugin's own assembly is measured: the test
+  output also holds the test assembly and Lidarr's host assemblies, which would otherwise be counted.
+-->
+<RunSettings>
+  <DataCollectionRunSettings>
+    <DataCollectors>
+      <DataCollector friendlyName="Code Coverage">
+        <Configuration>
+          <Format>cobertura</Format>
+          <CodeCoverage>
+            <ModulePaths>
+              <Include>
+                <ModulePath>.*[/\\]Lidarr\.Plugin\.LiveMusicArchive\.dll$</ModulePath>
+              </Include>
+            </ModulePaths>
+          </CodeCoverage>
+        </Configuration>
+      </DataCollector>
+    </DataCollectors>
+  </DataCollectionRunSettings>
+</RunSettings>

@@ -28,6 +28,14 @@ when .NET 8 isn't installed. CI uses SDK 8 and runs the tests on the .NET 8 runt
 builds and packages the plugin, checks formatting and runs the tests. The zip is uploaded as the `plugin` workflow
 artifact, so any run can be installed by hand.
 
+The tests also collect line coverage of the plugin assembly (`coverage.runsettings`) and upload it to GitHub code
+quality with `actions/upload-code-coverage`. Pushes to `main` set the baseline that pull requests are compared
+against. To see the same numbers locally:
+
+```sh
+dotnet test --collect:"Code Coverage" --settings coverage.runsettings --results-directory coverage
+```
+
 ## Cutting a release
 
 The version comes from git tags via [MinVer](https://github.com/adamralph/minver); there is no version in the
