@@ -263,8 +263,9 @@ namespace Lidarr.Plugin.LiveMusicArchive.Core
                         return IaJson.Parse(File.ReadAllText(cachePath));
                     }
 
+                    // Discard it entirely: a rejected listing keeps its cursor, and following it could loop forever.
                     _logger.Warn("archive.org returned an implausible answer for {0}; not caching it", url);
-                    return IaJson.Parse(content);
+                    return new JObject { ["items"] = new JArray() };
                 }
             }
             catch (Exception ex) when (ex is HttpRequestException || ex is OperationCanceledException || ex is IOException)

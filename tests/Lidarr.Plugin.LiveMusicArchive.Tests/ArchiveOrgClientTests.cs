@@ -103,6 +103,17 @@ namespace Lidarr.Plugin.LiveMusicArchive.Tests
         }
 
         [Fact]
+        public void a_repeating_unrelated_page_with_a_cursor_does_not_paginate_forever()
+        {
+            Serve(_ => @"{""items"":[{""identifier"":""x"",""collection"":[""SomeoneElse"",""etree""]}],""cursor"":""again""}");
+
+            var recordings = _client.GetRecordings("GratefulDead");
+
+            Assert.Empty(recordings);
+            Assert.Single(_requests);
+        }
+
+        [Fact]
         public void an_empty_listing_never_replaces_a_good_one()
         {
             Serve(_ => @"{""items"":[{""identifier"":""gd77"",""collection"":""GratefulDead""}]}");
