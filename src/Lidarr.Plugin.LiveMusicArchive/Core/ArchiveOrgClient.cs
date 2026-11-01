@@ -45,8 +45,10 @@ namespace Lidarr.Plugin.LiveMusicArchive.Core
     /// archive.org scrape, metadata and download APIs, with a change-aware on-disk cache. archive.org's
     /// metadata API sends no ETag or Last-Modified, but the scrape API reports each item's
     /// <c>oai_updatedate</c>; since we scrape the collection anyway, item metadata is refetched only when
-    /// that says the item changed after our copy was saved. When archive.org can't be reached, any cached
-    /// copy is served regardless of age, so an outage never makes data disappear.
+    /// that says the item changed after our copy was saved. When archive.org can't be reached, or answers
+    /// with something that can't be right (search results for another collection or artist, an empty
+    /// listing, metadata for another item; all observed during a 2026-11-01 search incident), any cached copy
+    /// is served regardless of age, and the bad answer is never cached.
     /// </summary>
     public class ArchiveOrgClient : IArchiveOrgClient
     {
@@ -59,7 +61,9 @@ namespace Lidarr.Plugin.LiveMusicArchive.Core
         /// </summary>
         public static readonly TimeSpan ItemTtl = TimeSpan.FromDays(180);
 
-        private static readonly string[] ScrapeFields = { "identifier", "date", "venue", "coverage", "downloads", "oai_updatedate" };
+        private static readonly string[] ScrapeFields = { "identifier", "date", "venue", "coverage", "downloads", "oai_updatedate", "collection" };
+        // More fields than the lookup needs, so per-query orders rarely collide (see FieldsFor).
+        private static readonly string[] CreatorFields = { "identifier", "collection", "creator", "date", "title" };
 
         // Collections every etree item belongs to; never an artist's own collection.
         private static readonly HashSet<string> SharedCollections = new(StringComparer.OrdinalIgnoreCase) { "etree", "stream_only", "audio", "opensource_audio", "fav-collections" };
@@ -92,10 +96,10 @@ namespace Lidarr.Plugin.LiveMusicArchive.Core
             do
             {
                 var url = "https://archive.org/services/search/v1/scrape" +
-                          $"?q={Uri.EscapeDataString(query)}&fields={string.Join(",", ScrapeFields)}&count=10000" +
+                          $"?q={Uri.EscapeDataString(query)}&fields={FieldsFor(query, ScrapeFields)}&count=10000" +
                           (cursor != null ? $"&cursor={Uri.EscapeDataString(cursor)}" : "");
-                var page = GetJson(url, Jittered(url, CollectionTtl, 0.10), changedAt: null);
-                items.AddRange((page["items"] as JArray ?? new JArray()).OfType<JObject>().Select(RecordingSummary.FromScrape));
+                var page = GetJson(url, Jittered(url, CollectionTtl, 0.10), changedAt: null, p => !Items(p).Any() || InCollection(p, collection).Any());
+                items.AddRange(InCollection(page, collection).Select(RecordingSummary.FromScrape));
                 cursor = page.Value<string>("cursor");
             }
             while (cursor != null);
@@ -106,11 +110,50 @@ namespace Lidarr.Plugin.LiveMusicArchive.Core
         /// <inheritdoc />
         public string FindCollectionByCreator(string creator)
         {
-            var query = $"creator:\"{creator.Replace("\"", "")}\" AND collection:etree AND mediatype:etree";
-            var url = $"https://archive.org/services/search/v1/scrape?q={Uri.EscapeDataString(query)}&fields=identifier,collection&count=100";
-            var page = GetJson(url, Jittered(url, CollectionTtl, 0.10), changedAt: null);
-            return MostCommonCollection((page["items"] as JArray ?? new JArray()).OfType<JObject>());
+            var query = $"creator:\"{CreatorPhrase(creator)}\" AND collection:etree AND mediatype:etree";
+            var url = $"https://archive.org/services/search/v1/scrape?q={Uri.EscapeDataString(query)}&fields={FieldsFor(query, CreatorFields)}&count=100";
+            var page = GetJson(url, Jittered(url, CollectionTtl, 0.10), changedAt: null, p => !Items(p).Any() || ByCreator(p, creator).Any());
+            return MostCommonCollection(ByCreator(page, creator));
         }
+
+        /// <summary>
+        /// The phrase to search archive.org's creator field for. archive.org usually drops a leading "The" ("Disco
+        /// Biscuits" for MusicBrainz's "The Disco Biscuits") and uses straight apostrophes; a phrase search is
+        /// literal, so both are normalised. <see cref="SameArtist"/> then confirms each match.
+        /// </summary>
+        /// <param name="artistName">The artist name.</param>
+        /// <returns>The search phrase.</returns>
+        internal static string CreatorPhrase(string artistName)
+        {
+            var phrase = artistName.Trim().Replace('\u2019', '\'').Replace('\u2018', '\'').Replace("\"", "");
+            return phrase.StartsWith("The ", StringComparison.OrdinalIgnoreCase) && phrase.Length > 4 ? phrase[4..] : phrase;
+        }
+
+        /// <summary>
+        /// The field list for a scrape query, in an order derived from the query. On 2026-11-01 archive.org's
+        /// scrape API cached responses by field list and ignored the query, so every query with the same fields got
+        /// the first one's results. A per-query order keeps queries apart without extra requests; the order is
+        /// stable for a query, so the plugin's own cache keys don't change. The plausibility checks still catch a clash.
+        /// </summary>
+        /// <param name="query">The search query.</param>
+        /// <param name="fields">The fields wanted.</param>
+        /// <returns>The comma-separated fields.</returns>
+        internal static string FieldsFor(string query, IEnumerable<string> fields)
+        {
+            var seed = BitConverter.ToInt32(SHA256.HashData(Encoding.UTF8.GetBytes(query)), 0);
+            var random = new Random(seed);
+            return string.Join(",", fields.OrderBy(_ => random.Next()));
+        }
+
+        /// <summary>
+        /// Whether an archive.org creator names the artist: equal once case, accents, punctuation, spacing and a
+        /// leading "The" are ignored. Phrase search alone also matches tribute acts ("Chum, A Tribute to Phish").
+        /// </summary>
+        /// <param name="creator">The item's creator field.</param>
+        /// <param name="artistName">The artist name.</param>
+        /// <returns>True when they name the same artist.</returns>
+        internal static bool SameArtist(string creator, string artistName) =>
+            creator != null && NormalizeName(creator) == NormalizeName(artistName);
 
         /// <summary>The artist collection most items belong to, ignoring archive-wide collections.</summary>
         /// <param name="items">Scrape results carrying a "collection" field.</param>
@@ -127,7 +170,11 @@ namespace Lidarr.Plugin.LiveMusicArchive.Core
         public JObject GetItemMetadata(string identifier, DateTimeOffset? updatedAt = null)
         {
             var url = $"https://archive.org/metadata/{Uri.EscapeDataString(identifier)}";
-            return GetJson(url, Jittered(url, ItemTtl, 0.15), updatedAt);
+            bool IsThisItem(JObject item) => IaJson.First(item["metadata"]?["identifier"]) == identifier;
+
+            // Unlike an empty listing, metadata for the wrong item (or none, for a missing one) is never usable.
+            var metadata = GetJson(url, Jittered(url, ItemTtl, 0.15), updatedAt, IsThisItem);
+            return IsThisItem(metadata) ? metadata : throw new HttpRequestException($"archive.org returned no metadata for {identifier}");
         }
 
         /// <inheritdoc />
@@ -157,7 +204,26 @@ namespace Lidarr.Plugin.LiveMusicArchive.Core
             return TimeSpan.FromTicks((long)(ttl.Ticks * (1 + (unit * fraction))));
         }
 
-        private JObject GetJson(string url, TimeSpan ttl, DateTimeOffset? changedAt)
+        private static IEnumerable<JObject> InCollection(JObject page, string collection) =>
+            Items(page).Where(i => IaJson.All(i["collection"]).Contains(collection, StringComparer.OrdinalIgnoreCase));
+
+        private static IEnumerable<JObject> ByCreator(JObject page, string creator) =>
+            Items(page).Where(i => IaJson.All(i["creator"]).Any(c => SameArtist(c, creator)));
+
+        private static IEnumerable<JObject> Items(JObject page) => (page["items"] as JArray ?? new JArray()).OfType<JObject>();
+
+        private static string NormalizeName(string name)
+        {
+            var decomposed = name.Trim().Normalize(NormalizationForm.FormD);
+            var letters = new string(decomposed.Where(char.IsLetterOrDigit).Select(char.ToLowerInvariant).ToArray());
+            return letters.StartsWith("the", StringComparison.Ordinal) && name.Trim().StartsWith("the ", StringComparison.OrdinalIgnoreCase)
+                ? letters[3..]
+                : letters;
+        }
+
+        // A response that fails `isPlausible` is treated like a failed request: the last good copy is used and
+        // the bad answer is not cached.
+        private JObject GetJson(string url, TimeSpan ttl, DateTimeOffset? changedAt, Func<JObject, bool> isPlausible)
         {
             var cachePath = Path.Combine(_cacheFolder, Convert.ToHexString(SHA1.HashData(Encoding.UTF8.GetBytes(url))) + ".json");
             if (File.Exists(cachePath))
@@ -177,6 +243,22 @@ namespace Lidarr.Plugin.LiveMusicArchive.Core
             try
             {
                 content = _http.GetStringAsync(url, CancellationToken.None).GetAwaiter().GetResult();
+                var answer = IaJson.Parse(content);
+
+                // An empty answer is believable on its own (an artist with no shows), but not as a replacement for
+                // results we already have: on 2026-11-01 archive.org also answered every search with nothing.
+                var emptiesCachedResults = !Items(answer).Any() && File.Exists(cachePath) && Items(IaJson.Parse(File.ReadAllText(cachePath))).Any();
+                if (!isPlausible(answer) || emptiesCachedResults)
+                {
+                    if (File.Exists(cachePath))
+                    {
+                        _logger.Warn("archive.org returned an implausible answer for {0}; using the cached copy from {1:u}", url, File.GetLastWriteTimeUtc(cachePath));
+                        return IaJson.Parse(File.ReadAllText(cachePath));
+                    }
+
+                    _logger.Warn("archive.org returned an implausible answer for {0}; not caching it", url);
+                    return IaJson.Parse(content);
+                }
             }
             catch (Exception ex) when (ex is HttpRequestException || ex is OperationCanceledException || ex is IOException)
             {

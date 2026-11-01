@@ -122,6 +122,7 @@ namespace Lidarr.Plugin.LiveMusicArchive.Tests
                     ["identifier"] = kv.Key,
                     ["date"] = "1977-05-08T00:00:00Z",
                     ["downloads"] = 1000 - i,
+                    ["collection"] = new JArray("GratefulDead", "etree"),
                     ["oai_updatedate"] = new JArray(kv.Value.ToString("yyyy-MM-ddTHH:mm:ssZ"))
                 });
                 return FakeHandler.Text(new JObject { ["items"] = new JArray(items) }.ToString());
