@@ -187,23 +187,31 @@ namespace Lidarr.Plugin.LiveMusicArchive.Tests
         }
 
         [Fact]
-        public async Task a_save_already_under_way_finishes_before_cancel_returns_and_later_ones_are_skipped()
+        public async Task cancel_waits_for_a_tag_in_progress_and_later_tags_are_skipped()
         {
-            var writeLock = new object();
-            using var cancel = new CancellationTokenSource();
-            Manifest(("t01.flac", "one")).Save(_folder);
-            ServeFiles(("t01.flac", "one"));
-
-            // Holding the lock stands in for a save in progress; the run must not write while it's held after cancel.
-            Task run;
-            lock (writeLock)
+            var tagStarted = new TaskCompletionSource();
+            var releaseTag = new ManualResetEventSlim();
+            _tagger.When(t => t.Tag(Arg.Any<string>(), Arg.Any<DownloadManifest>())).Do(_ =>
             {
-                run = Task.Run(() => _downloader.RunAsync(_folder, cancel.Token, writeLock));
-                Thread.Sleep(100);
-                cancel.Cancel();
-            }
+                tagStarted.TrySetResult();
+                releaseTag.Wait(TimeSpan.FromSeconds(10));
+            });
+            ServeFiles(("t01.flac", "one"), ("t02.flac", "two"));
+            Manifest(("t01.flac", "one"), ("t02.flac", "two")).Save(_folder);
 
-            await run;
+            _downloader.Start(_folder);
+            await tagStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            var cancel = Task.Run(() => _downloader.Cancel(_folder));
+
+            // The first tag is still writing, so Cancel must not have returned.
+            await Task.Delay(200);
+            Assert.False(cancel.IsCompleted);
+
+            releaseTag.Set();
+            await cancel.WaitAsync(TimeSpan.FromSeconds(5));
+
+            // The second tag and the "completed" manifest save were skipped.
+            _tagger.Received(1).Tag(Arg.Any<string>(), Arg.Any<DownloadManifest>());
             Assert.False(DownloadManifest.Load(_folder).Completed);
         }
 

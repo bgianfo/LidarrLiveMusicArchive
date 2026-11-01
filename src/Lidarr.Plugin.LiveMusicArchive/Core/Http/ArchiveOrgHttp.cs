@@ -122,6 +122,8 @@ namespace Lidarr.Plugin.LiveMusicArchive.Core.Http
                         }
                         else
                         {
+                            // Never commit a file once cancelled: its folder may be being deleted.
+                            cancellationToken.ThrowIfCancellationRequested();
                             File.Move(part, destination, overwrite: true);
                             File.Delete(etagPath);
                             return;
@@ -151,6 +153,8 @@ namespace Lidarr.Plugin.LiveMusicArchive.Core.Http
         // Returns null when the file is complete in "part", or the delay before the next attempt.
         private async Task<TimeSpan?> TryDownloadAsync(string url, string part, string etagPath, int attempt, CancellationToken cancellationToken)
         {
+            // Checked before every file-system write, so a cancelled download can't recreate a deleted folder.
+            cancellationToken.ThrowIfCancellationRequested();
             Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(part)));
             var existing = File.Exists(part) ? new FileInfo(part).Length : 0;
             var etag = File.Exists(etagPath) ? File.ReadAllText(etagPath) : null;
@@ -182,6 +186,7 @@ namespace Lidarr.Plugin.LiveMusicArchive.Core.Http
             }
 
             var resume = response.StatusCode == HttpStatusCode.PartialContent;
+            cancellationToken.ThrowIfCancellationRequested();
             await using var output = new FileStream(part, resume ? FileMode.Append : FileMode.Create, FileAccess.Write, FileShare.None);
             await using var input = await response.Content.ReadAsStreamAsync(cancellationToken);
             await CopyWithStallTimeoutAsync(input, output, cancellationToken);
