@@ -7,3 +7,5 @@ metadata-proxy/cache.db
 metadata-proxy/*.log
 spikes/*/out/
 dist/
+coverage/
+coverage.cobertura.xml
