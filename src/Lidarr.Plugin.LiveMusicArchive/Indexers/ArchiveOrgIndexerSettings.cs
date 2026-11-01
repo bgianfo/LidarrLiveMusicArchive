@@ -1,4 +1,5 @@
 using FluentValidation;
+using NzbDrone.Core.Annotations;
 using NzbDrone.Core.Indexers;
 using NzbDrone.Core.Validation;
 
@@ -19,9 +20,11 @@ namespace Lidarr.Plugin.LiveMusicArchive.Indexers
         private static readonly ArchiveOrgIndexerSettingsValidator Validator = new();
 
         /// <summary>Gets or sets the archive.org address. Not user-editable; required by <see cref="IIndexerSettings"/>.</summary>
+        [FieldDefinition(0, Label = "URL")]
         public string BaseUrl { get; set; } = "https://archive.org";
 
         /// <summary>Gets or sets the early release limit; unused because archive.org shows are always "released".</summary>
+        [FieldDefinition(1, Type = FieldType.Number, Label = "Early Download Limit", HelpText = "Time before release date Lidarr will download from this indexer, empty is no limit (Currently Unused)", Unit = "days", Advanced = true)]
         public int? EarlyReleaseLimit { get; set; }
 
         /// <inheritdoc />
