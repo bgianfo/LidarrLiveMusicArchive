@@ -149,7 +149,7 @@ namespace Lidarr.Plugin.LiveMusicArchive.Core
                 .ToList();
             var releases = items.Select(x => (ShowMapper.Release(x.Item, artistId, showDate), x.Downloads)).ToList();
 
-            var show = ShowMapper.Album(artist.ToObject<ArtistResource>(), collection, showDate, ShowCatalog.ShowTitle(showDate, recordings), ShowMapper.OrderReleases(releases));
+            var show = ShowMapper.Album(IaJson.ToResource<ArtistResource>(artist), collection, showDate, ShowCatalog.ShowTitle(showDate, recordings), ShowMapper.OrderReleases(releases));
             if (Artwork.Cover(items.Select(x => x.Item)) is { } cover)
             {
                 show.Images.Add(new ImageResource { CoverType = "Cover", Url = cover });

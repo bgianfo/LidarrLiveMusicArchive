@@ -48,6 +48,19 @@ namespace Lidarr.Plugin.LiveMusicArchive.Core
     public static class IaJson
     {
         /// <summary>
+        /// Settings for reading Lidarr's metadata JSON into its resource types. Some MusicBrainz data carries
+        /// <c>"rating": {"Value": null}</c>, which Lidarr tolerates but a non-nullable decimal does not; nulls are
+        /// skipped so the property keeps its default.
+        /// </summary>
+        public static readonly JsonSerializerSettings LenientSettings = new() { NullValueHandling = NullValueHandling.Ignore };
+
+        /// <summary>Converts Lidarr metadata JSON to a resource type, ignoring nulls (see <see cref="LenientSettings"/>).</summary>
+        /// <typeparam name="T">The resource type.</typeparam>
+        /// <param name="json">The JSON object.</param>
+        /// <returns>The resource.</returns>
+        public static T ToResource<T>(JToken json) => json.ToObject<T>(JsonSerializer.Create(LenientSettings));
+
+        /// <summary>
         /// Parses JSON with dates kept as strings. Newtonsoft would otherwise turn "1977-05-08T00:00:00Z"
         /// into a DateTime whose ToString() is culture-formatted ("05/08/1977 00:00:00").
         /// </summary>

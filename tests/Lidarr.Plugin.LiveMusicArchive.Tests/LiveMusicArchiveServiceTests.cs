@@ -125,6 +125,19 @@ namespace Lidarr.Plugin.LiveMusicArchive.Tests
         }
 
         [Fact]
+        public void builds_shows_for_artists_whose_rating_is_null()
+        {
+            // String Cheese Incident and Yonder Mountain String Band arrive like this from Lidarr's metadata server.
+            var artist = TestData.Artist();
+            artist["rating"] = JObject.Parse(@"{""Count"":0,""Value"":null}");
+
+            var album = _service.BuildShow(artist, "1977-05-08", Options(""));
+
+            Assert.NotNull(album);
+            Assert.Equal(0, Assert.Single(album.Artists).Rating.Value);
+        }
+
+        [Fact]
         public void unknown_show_date_builds_nothing() =>
             Assert.Null(_service.BuildShow(TestData.Artist(), "1977-05-09", Options("")));
 
