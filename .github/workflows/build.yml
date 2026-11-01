@@ -29,14 +29,14 @@ jobs:
         with:
           dotnet-version: 8.0.x
 
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         with:
           path: ~/.nuget/packages
           key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', 'Directory.Build.props') }}
           restore-keys: nuget-${{ runner.os }}-
 
       # Lidarr's assemblies (a ~140 MB release download), keyed on the pinned version in Directory.Build.props.
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         with:
           path: .refs
           key: lidarr-refs-${{ hashFiles('Directory.Build.props') }}
