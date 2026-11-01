@@ -6,12 +6,14 @@
     <NoWarn>$(NoWarn);CS1591</NoWarn>
   </PropertyGroup>
   <ItemGroup>
-    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />
-    <PackageReference Include="Microsoft.Extensions.TimeProvider.Testing" Version="8.10.0" />
-    <PackageReference Include="NSubstitute" Version="5.1.0" />
+    <!-- 18.x needs the .NET 10 SDK: its coverage collector loads System.Text.Json 10, so under the SDK 8 that CI
+         uses it silently writes no coverage report. Stay on 17.x until CI moves to a newer SDK. -->
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+    <PackageReference Include="Microsoft.Extensions.TimeProvider.Testing" Version="10.11.0" />
+    <PackageReference Include="NSubstitute" Version="6.2.0" />
     <!-- NSubstitute's Castle.Core pulls EventLog 6.0; Lidarr's assemblies are built against 8.0, so lift it to match. -->
     <PackageReference Include="System.Diagnostics.EventLog" Version="8.0.2" />
-    <PackageReference Include="xunit" Version="2.9.2" />
+    <PackageReference Include="xunit" Version="2.9.3" />
     <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
   </ItemGroup>
   <ItemGroup>

@@ -17,3 +17,6 @@ updates:
       # with LidarrVersion when Lidarr moves to a newer .NET.
       - dependency-name: System.Diagnostics.EventLog
         update-types: ["version-update:semver-major"]
+      # 18.x's coverage collector needs the .NET 10 SDK; CI builds with SDK 8 (see the test csproj).
+      - dependency-name: Microsoft.NET.Test.Sdk
+        update-types: ["version-update:semver-major"]
