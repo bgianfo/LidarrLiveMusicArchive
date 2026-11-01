@@ -16,7 +16,10 @@ namespace Lidarr.Plugin.LiveMusicArchive.Core.Downloads
         /// <returns>True while the background task runs.</returns>
         bool IsRunning(string folder);
 
-        /// <summary>Stops a running download, if any, and waits briefly for it to finish.</summary>
+        /// <summary>
+        /// Stops a running download, if any, and waits briefly for it to finish. Once this returns, the download
+        /// writes nothing more to its folder, even if it is still unwinding, so the folder can be deleted.
+        /// </summary>
         /// <param name="folder">The download folder.</param>
         void Cancel(string folder);
     }
@@ -36,7 +39,7 @@ namespace Lidarr.Plugin.LiveMusicArchive.Core.Downloads
         private readonly IArchiveOrgClient _client;
         private readonly ITrackTagger _tagger;
         private readonly Logger _logger;
-        private readonly ConcurrentDictionary<string, (Task Task, CancellationTokenSource Cancel)> _running = new();
+        private readonly ConcurrentDictionary<string, Job> _running = new();
 
         /// <summary>Initializes a new instance of the <see cref="ArchiveOrgDownloader"/> class.</summary>
         /// <param name="client">The archive.org client used to fetch files.</param>
@@ -66,16 +69,31 @@ namespace Lidarr.Plugin.LiveMusicArchive.Core.Downloads
             if (_running.TryRemove(Path.GetFullPath(folder), out var job))
             {
                 job.Cancel.Cancel();
-                job.Task.Wait(TimeSpan.FromSeconds(10));
+
+                // Wait out any folder write already in progress; every later one re-checks the token under this
+                // lock and is skipped, so the folder can be deleted as soon as Cancel returns.
+                lock (job.WriteLock)
+                {
+                }
+
+                if (!job.Task.Wait(CancelWaitTimeout))
+                {
+                    _logger.Debug("Download in {0} is still finishing a request after cancellation; it will write nothing more", folder);
+                }
             }
         }
+
+        /// <summary>Gets or sets how long <see cref="Cancel"/> waits for a download to stop; tests shorten it.</summary>
+        internal TimeSpan CancelWaitTimeout { get; set; } = TimeSpan.FromSeconds(10);
 
         /// <summary>Downloads the folder's files and records the outcome in its manifest.</summary>
         /// <param name="folder">The download folder.</param>
         /// <param name="cancellationToken">Stops the download between files.</param>
         /// <returns>A task that completes when the download finishes, fails or is cancelled.</returns>
-        internal async Task RunAsync(string folder, CancellationToken cancellationToken)
+        /// <param name="writeLock">Serialises folder writes with <see cref="Cancel"/>; null when nothing can cancel concurrently.</param>
+        internal async Task RunAsync(string folder, CancellationToken cancellationToken, object writeLock = null)
         {
+            var guard = new WriteGuard(writeLock ?? new object(), cancellationToken);
             var manifest = DownloadManifest.Load(folder);
             if (manifest == null || manifest.Completed)
             {
@@ -87,7 +105,7 @@ namespace Lidarr.Plugin.LiveMusicArchive.Core.Downloads
                 foreach (var file in manifest.Files)
                 {
                     cancellationToken.ThrowIfCancellationRequested();
-                    await DownloadFileAsync(manifest, folder, file, cancellationToken);
+                    await DownloadFileAsync(manifest, folder, file, guard, cancellationToken);
                 }
 
                 // Tagging changes the files, so it happens only once everything is verified. If Lidarr stops
@@ -101,8 +119,10 @@ namespace Lidarr.Plugin.LiveMusicArchive.Core.Downloads
                 manifest.Error = null;
                 _logger.Info("Downloaded {0} ({1} files)", manifest.Title, manifest.Files.Count);
             }
-            catch (OperationCanceledException)
+            catch (Exception ex) when (cancellationToken.IsCancellationRequested || ex is OperationCanceledException)
             {
+                // Cancelled: whatever failed afterwards is a consequence. Write nothing, because the folder may
+                // already be deleted; the manifest on disk still describes a resumable download.
                 return;
             }
             catch (Exception ex)
@@ -111,7 +131,7 @@ namespace Lidarr.Plugin.LiveMusicArchive.Core.Downloads
                 _logger.Error(ex, "Download of {0} failed", manifest.Title);
             }
 
-            manifest.Save(folder);
+            guard.Write(() => manifest.Save(folder));
         }
 
         /// <summary>Whether a file on disk matches the manifest (MD5 when known, otherwise size).</summary>
@@ -134,16 +154,20 @@ namespace Lidarr.Plugin.LiveMusicArchive.Core.Downloads
             return file.Size <= 0 || new FileInfo(path).Length == file.Size;
         }
 
-        private (Task Task, CancellationTokenSource Cancel) Launch(string folder)
+        private Job Launch(string folder)
         {
             var cancel = new CancellationTokenSource();
-            return (Task.Run(() => RunAsync(folder, cancel.Token)), cancel);
+            var writeLock = new object();
+            return new Job(Task.Run(() => RunAsync(folder, cancel.Token, writeLock)), cancel, writeLock);
         }
 
-        private async Task DownloadFileAsync(DownloadManifest manifest, string folder, ManifestFile file, CancellationToken cancellationToken)
+        private async Task DownloadFileAsync(DownloadManifest manifest, string folder, ManifestFile file, WriteGuard guard, CancellationToken cancellationToken)
         {
             var path = DownloadManifest.LocalPath(folder, file.Name);
-            Directory.CreateDirectory(Path.GetDirectoryName(path));
+            if (!guard.Write(() => Directory.CreateDirectory(Path.GetDirectoryName(path))))
+            {
+                throw new OperationCanceledException(cancellationToken);
+            }
 
             for (var attempt = 1; ; attempt++)
             {
@@ -163,9 +187,38 @@ namespace Lidarr.Plugin.LiveMusicArchive.Core.Downloads
                     File.Delete(path);
                     throw new IOException($"Checksum mismatch for {file.Name}");
                 }
-                catch (Exception ex) when (ex is not OperationCanceledException && attempt < AttemptsPerFile)
+                catch (Exception ex) when (!cancellationToken.IsCancellationRequested && ex is not OperationCanceledException && attempt < AttemptsPerFile)
                 {
                     _logger.Warn("Attempt {0} for {1}/{2} failed: {3}", attempt, manifest.Identifier, file.Name, ex.Message);
+                }
+            }
+        }
+
+        private sealed record Job(Task Task, CancellationTokenSource Cancel, object WriteLock);
+
+        // Runs a folder write only if the download hasn't been cancelled, as one step with respect to Cancel.
+        private sealed class WriteGuard
+        {
+            private readonly object _lock;
+            private readonly CancellationToken _cancellationToken;
+
+            public WriteGuard(object writeLock, CancellationToken cancellationToken)
+            {
+                _lock = writeLock;
+                _cancellationToken = cancellationToken;
+            }
+
+            public bool Write(Action write)
+            {
+                lock (_lock)
+                {
+                    if (_cancellationToken.IsCancellationRequested)
+                    {
+                        return false;
+                    }
+
+                    write();
+                    return true;
                 }
             }
         }
