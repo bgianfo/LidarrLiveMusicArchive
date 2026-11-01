@@ -12,3 +12,8 @@ updates:
       - /tests/Lidarr.Plugin.LiveMusicArchive.Tests
     schedule:
       interval: monthly
+    ignore:
+      # Pinned to the major version Lidarr's assemblies are built against (see the test csproj); bump it together
+      # with LidarrVersion when Lidarr moves to a newer .NET.
+      - dependency-name: System.Diagnostics.EventLog
+        update-types: ["version-update:semver-major"]
