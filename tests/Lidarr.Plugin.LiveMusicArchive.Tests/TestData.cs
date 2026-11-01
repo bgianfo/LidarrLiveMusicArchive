@@ -18,6 +18,9 @@ namespace Lidarr.Plugin.LiveMusicArchive.Tests
         /// <summary>A Shorten-original item (Dispatch, 1996): lossless but unimportable, with wrong .shn lengths.</summary>
         public const string ShortenItem = "dispatch1996-04-16.shnf";
 
+        /// <summary>An item whose only audio is "MPEG-4 Audio" (.m4a, AAC at ~278 kbps), with "1 of 11" track numbers.</summary>
+        public const string M4aOnlyItem = "josegonzalez2006-09-08";
+
         public static readonly Logger Logger = LogManager.CreateNullLogger();
 
         public static JObject Item(string identifier) => Fixture(identifier);

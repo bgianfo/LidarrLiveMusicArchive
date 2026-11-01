@@ -21,6 +21,24 @@ namespace Lidarr.Plugin.LiveMusicArchive.Core
         /// <returns>The album, or null when it was never saved.</returns>
         AlbumResource Load(string albumId);
 
+        /// <summary>
+        /// Records that none of a show's recordings has audio Lidarr can import (only Shorten, say). Lidarr deletes
+        /// an album without releases, so listing the show again would add and delete it on every refresh.
+        /// </summary>
+        /// <param name="albumId">The synthetic album id.</param>
+        /// <param name="identifiers">The recordings that were examined.</param>
+        void MarkUnplayable(string albumId, IEnumerable<string> identifiers);
+
+        /// <summary>Whether a show was found unplayable and archive.org has added no recording of it since.</summary>
+        /// <param name="albumId">The synthetic album id.</param>
+        /// <param name="identifiers">The recordings archive.org lists for the show now.</param>
+        /// <returns>True when every listed recording was already examined and found unplayable.</returns>
+        bool IsUnplayable(string albumId, IEnumerable<string> identifiers);
+
+        /// <summary>Forgets an unplayable mark, once the show has an importable recording.</summary>
+        /// <param name="albumId">The synthetic album id.</param>
+        void ClearUnplayable(string albumId);
+
         /// <summary>Every saved show of an artist.</summary>
         /// <param name="artistMbid">The artist's MusicBrainz id.</param>
         /// <returns>The saved albums.</returns>
@@ -57,6 +75,47 @@ namespace Lidarr.Plugin.LiveMusicArchive.Core
         }
 
         /// <inheritdoc />
+        public void MarkUnplayable(string albumId, IEnumerable<string> identifiers)
+        {
+            var path = UnplayablePath(albumId);
+            if (path != null)
+            {
+                Directory.CreateDirectory(Path.GetDirectoryName(path));
+                File.WriteAllText(path, JsonConvert.SerializeObject(identifiers.Distinct().OrderBy(i => i, StringComparer.Ordinal)));
+            }
+        }
+
+        /// <inheritdoc />
+        public bool IsUnplayable(string albumId, IEnumerable<string> identifiers)
+        {
+            var path = UnplayablePath(albumId);
+            if (path == null || !File.Exists(path))
+            {
+                return false;
+            }
+
+            try
+            {
+                var examined = JsonConvert.DeserializeObject<List<string>>(File.ReadAllText(path)).ToHashSet();
+                return identifiers.All(examined.Contains);
+            }
+            catch (JsonException)
+            {
+                return false;
+            }
+        }
+
+        /// <inheritdoc />
+        public void ClearUnplayable(string albumId)
+        {
+            var path = UnplayablePath(albumId);
+            if (path != null && File.Exists(path))
+            {
+                File.Delete(path);
+            }
+        }
+
+        /// <inheritdoc />
         public List<AlbumResource> ForArtist(string artistMbid)
         {
             var folder = Path.Combine(_folder, artistMbid);
@@ -76,6 +135,9 @@ namespace Lidarr.Plugin.LiveMusicArchive.Core
                 return null;
             }
         }
+
+        private string UnplayablePath(string albumId) =>
+            PathFor(albumId) is { } path ? Path.ChangeExtension(path, ".unplayable") : null;
 
         // Only synthetic ids are stored, which also keeps paths inside the folder.
         private string PathFor(string albumId) =>

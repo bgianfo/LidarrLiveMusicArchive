@@ -89,6 +89,12 @@ namespace Lidarr.Plugin.LiveMusicArchive.Core
             var added = 0;
             foreach (var (date, recordings) in shows.OrderBy(x => x.Key, StringComparer.Ordinal))
             {
+                // Same recordings BuildShow examines, so a show is skipped only once those were all found unplayable.
+                if (_archive.IsUnplayable(SyntheticIds.AlbumId(artistId, date), MostDownloaded(recordings, options.MaxRecordingsPerShow).Select(r => r.Identifier)))
+                {
+                    continue;
+                }
+
                 albums.Add(JObject.FromObject(ShowMapper.AlbumSummary(artistId, date, ShowCatalog.ShowTitle(date, recordings))));
                 added++;
             }
@@ -160,6 +166,19 @@ namespace Lidarr.Plugin.LiveMusicArchive.Core
             }
             show = ShowMapper.KeepRemovedReleases(show, saved, recordings.Select(r => SyntheticIds.ReleaseId(r.Identifier)).ToHashSet());
             _archive.Save(show);
+
+            // Lidarr will delete a show without releases; remember why, so it isn't listed again until a new
+            // recording appears. Only the recordings examined count, so a larger "Max Recordings" re-examines.
+            if (show.Releases.Count == 0)
+            {
+                _logger.Info("{0}: no recording has audio Lidarr can import; leaving the show out until archive.org adds another", show.Title);
+                _archive.MarkUnplayable(albumId, items.Select(x => IaJson.First(x.Item["metadata"]?["identifier"])).Where(i => i != null));
+            }
+            else
+            {
+                _archive.ClearUnplayable(albumId);
+            }
+
             return show;
         }
 

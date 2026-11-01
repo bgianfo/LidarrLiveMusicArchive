@@ -45,11 +45,18 @@ namespace Lidarr.Plugin.LiveMusicArchive.Core
         /// Audio formats Lidarr can import, best first: lossless before lossy. Shorten (.shn) is lossless
         /// and common on etree, but Lidarr can't import it, so it's absent until the plugin can convert it.
         /// </summary>
-        public static readonly IReadOnlyList<string> FormatPreference = new[] { "Flac", "24bit Flac", "VBR MP3", "Ogg Vorbis", "64Kbps MP3" };
+        public static readonly IReadOnlyList<string> FormatPreference = new[] { "Flac", "24bit Flac", "VBR MP3", MPEG4Audio, "Ogg Vorbis", "64Kbps MP3" };
+
+        /// <summary>
+        /// archive.org's label for .m4a files, AAC or ALAC. Some uploads have only these, with no FLAC or MP3
+        /// derivatives (e.g. josegonzalez2006-09-08). Ranked after MP3 because most are lossy AAC; see
+        /// <see cref="ReleaseOffers.QualityTag(string, IReadOnlyCollection{AudioFile})"/> for telling them apart.
+        /// </summary>
+        public const string MPEG4Audio = "MPEG-4 Audio";
 
         // Whose length to trust, best first. archive.org's lengths for Shorten originals are wrong
         // (d1t01.shn says 44.58s, its MP3 says 01:51), while its MP3 derivatives are decoded and accurate.
-        private static readonly string[] LengthPreference = { "VBR MP3", "Flac", "24bit Flac", "Ogg Vorbis", "64Kbps MP3" };
+        private static readonly string[] LengthPreference = { "VBR MP3", "Flac", "24bit Flac", MPEG4Audio, "Ogg Vorbis", "64Kbps MP3" };
 
         private static readonly Regex SetTrackPattern = new(@"(?:d|s|cd|disc|set)(\d+)[._-]?t(?:rack)?(\d+)", RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
@@ -153,7 +160,8 @@ namespace Lidarr.Plugin.LiveMusicArchive.Core
                 return (int.Parse(match.Groups[1].Value, CultureInfo.InvariantCulture), int.Parse(match.Groups[2].Value, CultureInfo.InvariantCulture));
             }
 
-            var track = (trackField ?? "").Split('/')[0];
+            // "3", "3/11" and "3 of 11" all occur.
+            var track = Regex.Match(trackField ?? "", @"^\s*(\d+)").Groups[1].Value;
             return (1, int.TryParse(track, NumberStyles.Integer, CultureInfo.InvariantCulture, out var n) ? n : 0);
         }
     }

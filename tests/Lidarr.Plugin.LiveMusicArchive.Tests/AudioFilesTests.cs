@@ -106,6 +106,19 @@ namespace Lidarr.Plugin.LiveMusicArchive.Tests
             Assert.Equal(new[] { 1, 2 }, mp3.Select(f => f.Medium).Distinct());
         }
 
+        [Fact]
+        public void m4a_only_items_are_downloadable_with_track_numbers_from_n_of_m()
+        {
+            var item = TestData.Item(TestData.M4aOnlyItem);
+
+            Assert.Equal(new[] { AudioFiles.MPEG4Audio }, AudioFiles.DownloadableFormats(item));
+            var files = AudioFiles.ForFormat(item, AudioFiles.MPEG4Audio);
+            Assert.Equal(11, files.Count);
+            Assert.Equal(Enumerable.Range(1, 11), files.Select(f => f.Track));
+            Assert.Equal("Deadweight On Velveteen", files[0].Title);
+            Assert.Equal(193650, files[0].DurationMs);
+        }
+
         [Theory]
         [InlineData("06:21", 381000)]
         [InlineData("365.55", 365550)]
