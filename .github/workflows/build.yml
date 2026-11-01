@@ -27,24 +27,24 @@ jobs:
       code-quality: write # upload line coverage to GitHub code quality
       pull-requests: read # lets the coverage upload find the pull request for a push
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0 # MinVer derives the version from the full tag history
           # Build the pull request's own head commit, not the merge commit, so coverage lines match its files.
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: 8.0.x
 
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         with:
           path: ~/.nuget/packages
           key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', 'Directory.Build.props') }}
           restore-keys: nuget-${{ runner.os }}-
 
       # Lidarr's assemblies (a ~140 MB release download), keyed on the pinned version in Directory.Build.props.
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         with:
           path: .refs
           key: lidarr-refs-${{ hashFiles('Directory.Build.props') }}
@@ -88,7 +88,7 @@ jobs:
           label: code-coverage/dotnet
           fail-on-error: false
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: plugin
           path: dist/
@@ -101,11 +101,11 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0 # needed to find which branch contains the tag
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: plugin
           path: dist
