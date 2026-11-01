@@ -98,7 +98,7 @@ namespace Lidarr.Plugin.LiveMusicArchive.Core
                 var url = "https://archive.org/services/search/v1/scrape" +
                           $"?q={Uri.EscapeDataString(query)}&fields={FieldsFor(query, ScrapeFields)}&count=10000" +
                           (cursor != null ? $"&cursor={Uri.EscapeDataString(cursor)}" : "");
-                var page = GetJson(url, Jittered(url, CollectionTtl, 0.10), changedAt: null, p => !Items(p).Any() || InCollection(p, collection).Any());
+                var page = GetJson(url, Jittered(url, CollectionTtl, 0.10), changedAt: null, (answer, _) => !Items(answer).Any() || InCollection(answer, collection).Any());
                 items.AddRange(InCollection(page, collection).Select(RecordingSummary.FromScrape));
                 cursor = page.Value<string>("cursor");
             }
@@ -112,7 +112,12 @@ namespace Lidarr.Plugin.LiveMusicArchive.Core
         {
             var query = $"creator:\"{CreatorPhrase(creator)}\" AND collection:etree AND mediatype:etree";
             var url = $"https://archive.org/services/search/v1/scrape?q={Uri.EscapeDataString(query)}&fields={FieldsFor(query, CreatorFields)}&count=100";
-            var page = GetJson(url, Jittered(url, CollectionTtl, 0.10), changedAt: null, p => !Items(p).Any() || ByCreator(p, creator).Any());
+            // A phrase search often finds only other creators (tribute bands for "Phish"), and SameArtist decides
+            // whether any result is this artist, so such an answer is believable, and cached, on its own. It is not
+            // believable as a replacement for a cached answer that did find the artist: that is what another query's
+            // results look like when archive.org's search cache misbehaves.
+            var page = GetJson(url, Jittered(url, CollectionTtl, 0.10), changedAt: null,
+                (answer, cached) => ByCreator(answer, creator).Any() || cached == null || !ByCreator(cached, creator).Any());
             return MostCommonCollection(ByCreator(page, creator));
         }
 
@@ -173,7 +178,7 @@ namespace Lidarr.Plugin.LiveMusicArchive.Core
             bool IsThisItem(JObject item) => IaJson.First(item["metadata"]?["identifier"]) == identifier;
 
             // Unlike an empty listing, metadata for the wrong item (or none, for a missing one) is never usable.
-            var metadata = GetJson(url, Jittered(url, ItemTtl, 0.15), updatedAt, IsThisItem);
+            var metadata = GetJson(url, Jittered(url, ItemTtl, 0.15), updatedAt, (answer, _) => IsThisItem(answer));
             return IsThisItem(metadata) ? metadata : throw new HttpRequestException($"archive.org returned no metadata for {identifier}");
         }
 
@@ -221,9 +226,10 @@ namespace Lidarr.Plugin.LiveMusicArchive.Core
                 : letters;
         }
 
-        // A response that fails `isPlausible` is treated like a failed request: the last good copy is used and
+        // A response that fails `isPlausible` (given the new answer and the cached copy, if any) is treated like a
+        // failed request: the last good copy is used and
         // the bad answer is not cached.
-        private JObject GetJson(string url, TimeSpan ttl, DateTimeOffset? changedAt, Func<JObject, bool> isPlausible)
+        private JObject GetJson(string url, TimeSpan ttl, DateTimeOffset? changedAt, Func<JObject, JObject, bool> isPlausible)
         {
             var cachePath = Path.Combine(_cacheFolder, Convert.ToHexString(SHA1.HashData(Encoding.UTF8.GetBytes(url))) + ".json");
             if (File.Exists(cachePath))
@@ -247,8 +253,9 @@ namespace Lidarr.Plugin.LiveMusicArchive.Core
 
                 // An empty answer is believable on its own (an artist with no shows), but not as a replacement for
                 // results we already have: on 2026-11-01 archive.org also answered every search with nothing.
-                var emptiesCachedResults = !Items(answer).Any() && File.Exists(cachePath) && Items(IaJson.Parse(File.ReadAllText(cachePath))).Any();
-                if (!isPlausible(answer) || emptiesCachedResults)
+                var cached = File.Exists(cachePath) ? IaJson.Parse(File.ReadAllText(cachePath)) : null;
+                var emptiesCachedResults = !Items(answer).Any() && cached != null && Items(cached).Any();
+                if (!isPlausible(answer, cached) || emptiesCachedResults)
                 {
                     if (File.Exists(cachePath))
                     {

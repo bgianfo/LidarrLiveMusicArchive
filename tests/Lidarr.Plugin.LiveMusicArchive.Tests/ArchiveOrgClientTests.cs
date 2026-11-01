@@ -129,6 +129,34 @@ namespace Lidarr.Plugin.LiveMusicArchive.Tests
         }
 
         [Fact]
+        public void a_creator_search_finding_only_other_artists_is_cached_not_retried()
+        {
+            Serve(_ => @"{""items"":[{""collection"":[""ChumATributetoPhish"",""etree""],""creator"":""Chum, A Tribute to Phish""}]}");
+
+            Assert.Null(_client.FindCollectionByCreator("Phish"));
+            Assert.Null(_client.FindCollectionByCreator("Phish"));
+
+            Assert.Single(_requests);
+        }
+
+        [Theory]
+        [InlineData(@"{""items"":[{""collection"":[""ChumATributetoPhish"",""etree""],""creator"":""Chum, A Tribute to Phish""}]}")]
+        [InlineData(@"{""items"":[{""collection"":[""Dispatch"",""etree""],""creator"":""Dispatch""}]}")]
+        [InlineData(@"{""items"":[]}")]
+        public void a_good_creator_match_survives_a_later_answer_without_the_artist(string later)
+        {
+            Serve(_ => @"{""items"":[{""collection"":[""DiscoBiscuits"",""etree""],""creator"":""Disco Biscuits""}]}");
+            Assert.Equal("DiscoBiscuits", _client.FindCollectionByCreator("The Disco Biscuits"));
+            _clock.Fake.Advance(TimeSpan.FromDays(2));
+            Serve(_ => later);
+
+            Assert.Equal("DiscoBiscuits", _client.FindCollectionByCreator("The Disco Biscuits"));
+            // And the good answer is still what's cached.
+            _clock.Fake.Advance(TimeSpan.FromHours(1));
+            Assert.Equal("DiscoBiscuits", _client.FindCollectionByCreator("The Disco Biscuits"));
+        }
+
+        [Fact]
         public void creator_search_ignores_tribute_acts_and_other_artists()
         {
             Serve(_ => @"{""items"":[{""collection"":[""ChumATributetoPhish"",""etree""],""creator"":""Chum, A Tribute to Phish""},{""collection"":[""Dispatch"",""etree""],""creator"":""Dispatch""}]}");
