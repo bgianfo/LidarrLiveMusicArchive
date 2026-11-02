@@ -181,6 +181,9 @@ namespace Lidarr.Plugin.LiveMusicArchive.Tests
         [InlineData("moe.", "Moe", true)]
         [InlineData("Umphrey’s McGee", "Umphrey's McGee", true)]
         [InlineData("Béla Fleck", "Bela Fleck", true)]
+        [InlineData("Umphreys McGee", "Umphrey’s McGee", true)]
+        [InlineData("Phil Lesh and Friends", "Phil Lesh & Friends", true)]
+        [InlineData("Phil Lesh", "Phil Lesh & Friends", false)]
         [InlineData("Chum, A Tribute to Phish", "Phish", false)]
         [InlineData("Theory of a Deadman", "ory of a Deadman", false)]
         public void matches_artist_names_loosely_but_not_partially(string creator, string artist, bool same) =>
@@ -274,6 +277,23 @@ namespace Lidarr.Plugin.LiveMusicArchive.Tests
         [InlineData("moe.", "moe.")]
         public void creator_phrase_matches_how_archive_org_writes_names(string artist, string phrase) =>
             Assert.Equal(phrase, ArchiveOrgClient.CreatorPhrase(artist));
+
+        [Theory]
+        [InlineData("Dispatch", "\"Dispatch\"")]
+        [InlineData("Umphrey’s McGee", "(\"Umphrey's McGee\" OR \"Umphreys McGee\")")]
+        [InlineData("Phil Lesh & Friends", "(\"Phil Lesh & Friends\" OR \"Phil Lesh and Friends\")")]
+        [InlineData("Hot Tuna and Friends", "(\"Hot Tuna and Friends\" OR \"Hot Tuna & Friends\")")]
+        public void creator_query_also_tries_the_spellings_tapers_use(string artist, string query) =>
+            Assert.Equal(query, ArchiveOrgClient.CreatorQuery(artist));
+
+        [Fact]
+        public void umphreys_mcgee_is_found_without_the_apostrophe()
+        {
+            Serve(_ => @"{""items"":[{""collection"":[""UmphreysMcGee"",""etree""],""creator"":""Umphreys McGee""},{""collection"":[""UmphreysMcGee"",""etree""],""creator"":""Music By Umphrey's McGee, Capture by marc geanoules""}]}");
+
+            Assert.Equal("UmphreysMcGee", _client.FindCollectionByCreator("Umphrey’s McGee"));
+            Assert.Contains(Uri.EscapeDataString("\"Umphreys McGee\""), Assert.Single(_requests));
+        }
 
         [Fact]
         public void the_disco_biscuits_are_found_under_disco_biscuits()
