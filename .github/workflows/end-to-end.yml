@@ -1,0 +1,65 @@
+# Runs the plugin inside a real Lidarr against local fakes of archive.org and Lidarr's metadata server
+# (tests/Lidarr.Plugin.LiveMusicArchive.EndToEnd, see docs/TESTING.md). Nothing leaves the runner except the
+# Lidarr download, so it runs on every pull request, against the Lidarr the plugin compiles against and the
+# newest develop build, to catch Lidarr changes before users do.
+name: End to end
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+  schedule:
+    - cron: '17 6 * * 1' # weekly, so a new Lidarr build is noticed even without plugin changes
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  end-to-end:
+    name: Lidarr ${{ matrix.lidarr }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        # "version:branch" of a Lidarr GitHub release. The first is the version in Directory.Build.props.
+        lidarr: ['3.1.6.5079:master', '3.2.0.5144:develop']
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0 # MinVer derives the version from the full tag history
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 8.0.x
+
+      - uses: actions/cache@v6
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', 'Directory.Build.props') }}
+          restore-keys: nuget-${{ runner.os }}-
+
+      - uses: actions/cache@v6
+        with:
+          path: .refs
+          key: lidarr-refs-${{ hashFiles('Directory.Build.props') }}
+
+      # The Lidarr builds the tests run (about 100 MB each).
+      - uses: actions/cache@v6
+        with:
+          path: .e2e
+          key: lidarr-e2e-${{ matrix.lidarr }}
+
+      - name: Build
+        run: dotnet build -c Release
+
+      - name: End-to-end tests
+        env:
+          LMA_E2E: '1'
+          LMA_E2E_LIDARR: ${{ matrix.lidarr }}
+        run: dotnet test tests/Lidarr.Plugin.LiveMusicArchive.EndToEnd -c Release --no-build --logger "console;verbosity=normal"
