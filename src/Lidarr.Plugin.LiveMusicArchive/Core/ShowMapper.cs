@@ -152,21 +152,7 @@ namespace Lidarr.Plugin.LiveMusicArchive.Core
                 return null;
             }
 
-            var tracks = AudioFiles.ForFormat(itemMetadata, format).Select((file, i) => new TrackResource
-            {
-                // Ids come from the original file, so they don't change if the best format does. Ids issued by
-                // earlier versions are listed as old ids so Lidarr migrates existing tracks instead of replacing them.
-                Id = SyntheticIds.TrackId(identifier, file.SongKey),
-                OldIds = SyntheticIds.LegacyTrackIds(identifier, file.SongKey, file.Name),
-                RecordingId = SyntheticIds.RecordingId(identifier, file.SongKey),
-                OldRecordingIds = SyntheticIds.LegacyRecordingIds(identifier, file.SongKey, file.Name),
-                ArtistId = artistMbid,
-                TrackName = file.Title ?? Path.GetFileNameWithoutExtension(file.Name),
-                TrackNumber = (file.Track > 0 ? file.Track : i + 1).ToString(CultureInfo.InvariantCulture),
-                TrackPosition = i + 1,
-                DurationMs = file.DurationMs,
-                MediumNumber = file.Medium
-            }).ToList();
+            var tracks = Tracks(identifier, artistMbid, AudioFiles.ForFormat(itemMetadata, format));
 
             var lineage = Lineage(identifier, string.Join(" ", IaJson.All(metadata["source"])));
 
@@ -189,6 +175,31 @@ namespace Lidarr.Plugin.LiveMusicArchive.Core
 
             return new MappedRelease { Resource = release, Format = format, Lineage = lineage };
         }
+
+        /// <summary>
+        /// The tracks of a recording, one per file, in order. Shared by the metadata (the release's track list)
+        /// and the download client (the tags written to each file), so both always agree; ids come from the
+        /// original file, so any format of the recording maps to the same tracks.
+        /// </summary>
+        /// <param name="identifier">The archive.org identifier.</param>
+        /// <param name="artistMbid">The artist's MusicBrainz id, or null when only identity and order matter.</param>
+        /// <param name="files">The recording's files in one format, in playback order (<see cref="AudioFiles.ForFormat"/>).</param>
+        /// <returns>The tracks, parallel to <paramref name="files"/>.</returns>
+        public static List<TrackResource> Tracks(string identifier, string artistMbid, IReadOnlyList<AudioFile> files) =>
+            files.Select((file, i) => new TrackResource
+            {
+                // Ids issued by earlier versions are listed as old ids so Lidarr migrates existing tracks.
+                Id = SyntheticIds.TrackId(identifier, file.SongKey),
+                OldIds = SyntheticIds.LegacyTrackIds(identifier, file.SongKey, file.Name),
+                RecordingId = SyntheticIds.RecordingId(identifier, file.SongKey),
+                OldRecordingIds = SyntheticIds.LegacyRecordingIds(identifier, file.SongKey, file.Name),
+                ArtistId = artistMbid,
+                TrackName = file.Title ?? Path.GetFileNameWithoutExtension(file.Name),
+                TrackNumber = (file.Track > 0 ? file.Track : i + 1).ToString(CultureInfo.InvariantCulture),
+                TrackPosition = i + 1,
+                DurationMs = file.DurationMs,
+                MediumNumber = file.Medium
+            }).ToList();
 
         /// <summary>Orders releases best first: lossless, then soundboards, then most downloaded.</summary>
         /// <param name="releases">The mapped releases with their download counts; null releases are dropped.</param>

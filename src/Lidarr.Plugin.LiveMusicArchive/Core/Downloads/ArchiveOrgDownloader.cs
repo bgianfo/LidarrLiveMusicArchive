@@ -116,7 +116,7 @@ namespace Lidarr.Plugin.LiveMusicArchive.Core.Downloads
                 // Each tag is a short write under the guard, so Cancel waits for one in progress and skips the rest.
                 foreach (var file in manifest.Files)
                 {
-                    if (!guard.Write(() => _tagger.Tag(DownloadManifest.LocalPath(folder, file.Name), manifest)))
+                    if (!guard.Write(() => _tagger.Tag(DownloadManifest.LocalPath(folder, file.Name), manifest, file)))
                     {
                         throw new OperationCanceledException(cancellationToken);
                     }

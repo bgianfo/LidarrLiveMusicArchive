@@ -81,6 +81,44 @@ namespace Lidarr.Plugin.LiveMusicArchive.Tests
         }
 
         [Fact]
+        public void manifest_files_carry_the_same_track_identity_as_the_release()
+        {
+            var item = TestData.Item(TestData.SoundboardItem);
+            var release = ShowMapper.Release(item, TestData.GratefulDead, "1977-05-08").Resource;
+
+            var files = ArchiveOrgDownloadClient.ManifestFiles(TestData.SoundboardItem, AudioFiles.ForFormat(item, "VBR MP3"), isPluginShow: true);
+
+            Assert.Equal(release.Tracks.Select(t => t.RecordingId), files.Select(f => f.RecordingId));
+            Assert.Equal(release.Tracks.Select(t => t.TrackName), files.Select(f => f.Title));
+            Assert.Equal(release.Tracks.Select(t => t.TrackPosition), files.Select(f => f.TrackNumber));
+            Assert.Equal(release.Tracks.Select(t => t.MediumNumber), files.Select(f => f.Disc));
+        }
+
+        [Fact]
+        public void a_lossless_download_maps_to_the_same_tracks_as_the_mp3_release()
+        {
+            var item = TestData.SyntheticItem("x",
+                new { name = "t01.flac", format = "Flac", source = "original", title = "Opener" },
+                new { name = "t02.flac", format = "Flac", source = "original", title = "Closer" },
+                new { name = "t01.mp3", format = "VBR MP3", source = "derivative", original = "t01.flac" },
+                new { name = "t02.mp3", format = "VBR MP3", source = "derivative", original = "t02.flac" });
+
+            var flac = ArchiveOrgDownloadClient.ManifestFiles("x", AudioFiles.ForFormat(item, "Flac"), isPluginShow: true);
+            var mp3 = ArchiveOrgDownloadClient.ManifestFiles("x", AudioFiles.ForFormat(item, "VBR MP3"), isPluginShow: true);
+
+            Assert.Equal(flac.Select(f => f.RecordingId), mp3.Select(f => f.RecordingId));
+            Assert.Equal(new[] { "Opener", "Closer" }, mp3.Select(f => f.Title));
+        }
+
+        [Fact]
+        public void musicbrainz_shows_get_no_recording_ids()
+        {
+            var item = TestData.Item(TestData.SoundboardItem);
+
+            Assert.All(ArchiveOrgDownloadClient.ManifestFiles(TestData.SoundboardItem, AudioFiles.ForFormat(item, "VBR MP3"), isPluginShow: false), f => Assert.Null(f.RecordingId));
+        }
+
+        [Fact]
         public async Task download_rejects_foreign_urls() =>
             await Assert.ThrowsAsync<InvalidOperationException>(() => _downloadClient.Download(Remote("https://example.com/x.torrent"), null));
 

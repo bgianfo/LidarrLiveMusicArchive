@@ -31,6 +31,6 @@
     <Reference Include="$(LidarrRefs)/TagLibSharp.dll" />
   </ItemGroup>
   <ItemGroup>
-    <None Include="Fixtures/*.json;Fixtures/*.mp3" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="Fixtures/*.json;Fixtures/*.mp3;Fixtures/*.m4a;Fixtures/*.flac" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

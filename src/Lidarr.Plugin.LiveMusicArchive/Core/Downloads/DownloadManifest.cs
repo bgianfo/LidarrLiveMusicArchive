@@ -13,6 +13,21 @@ namespace Lidarr.Plugin.LiveMusicArchive.Core.Downloads
 
         /// <summary>Gets or sets the expected MD5 checksum, or null when unknown.</summary>
         public string Md5 { get; set; }
+
+        /// <summary>Gets or sets the song title to tag the file with, or null to leave the file's own.</summary>
+        public string Title { get; set; }
+
+        /// <summary>Gets or sets the track's position in its release (Lidarr's absolute track number), or 0.</summary>
+        public int TrackNumber { get; set; }
+
+        /// <summary>Gets or sets the disc or set number, or 0.</summary>
+        public int Disc { get; set; }
+
+        /// <summary>
+        /// Gets or sets the track's recording id, tagged as the MusicBrainz track id. Lidarr matches each file to a
+        /// track by it, overriding whatever the taper's tags say. Null for MusicBrainz shows.
+        /// </summary>
+        public string RecordingId { get; set; }
     }
 
     /// <summary>
