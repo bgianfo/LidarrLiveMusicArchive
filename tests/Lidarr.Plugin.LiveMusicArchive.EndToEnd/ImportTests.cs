@@ -48,6 +48,8 @@ namespace Lidarr.Plugin.LiveMusicArchive.EndToEnd
             Assert.Equal("2001-05-01: The Test Hall, Springfield, XX", flac["title"].GetValue<string>());
             Assert.Single(flac["releases"].AsArray());
             Assert.Single(m4a["releases"].AsArray());
+            // Shows are built from artist requests; asking the metadata server for an lma- album only wastes a 404.
+            Assert.DoesNotContain(_env.Fakes.Requests, r => r.Contains("/album/lma-", StringComparison.Ordinal));
         }
 
         [EndToEndFact]

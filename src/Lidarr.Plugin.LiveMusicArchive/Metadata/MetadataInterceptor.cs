@@ -2,7 +2,6 @@ using System.Net;
 using System.Text.RegularExpressions;
 using Lidarr.Plugin.LiveMusicArchive.Core;
 using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
 using NLog;
 using NzbDrone.Common.Http;
 using NzbDrone.Core.Configuration;
@@ -21,6 +20,8 @@ namespace Lidarr.Plugin.LiveMusicArchive.Metadata
         private const string DefaultMetadataHost = "api.lidarr.audio";
         // Marks our own upstream fetches so we don't re-augment them.
         private const string InternalHeader = "X-Lidarr-Plugin-LiveMusicArchive";
+        // Carries a show's album id on a request PreRequest turned into an artist request.
+        private const string ShowHeader = "X-Lidarr-Plugin-LiveMusicArchive-Show";
 
         private static readonly Regex ArtistRoute = new(@"/artist/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$", RegexOptions.Compiled);
         private static readonly Regex AlbumRoute = new(@"/album/(lma-[^/?]+)$", RegexOptions.Compiled);
@@ -30,30 +31,49 @@ namespace Lidarr.Plugin.LiveMusicArchive.Metadata
         private readonly Lazy<ILiveMusicArchiveService> _service;
         private readonly Lazy<IMetadataFactory> _metadataFactory;
         private readonly Lazy<IConfigService> _configService;
-        private readonly Lazy<IHttpClient> _httpClient;
         private readonly Logger _logger;
 
         /// <summary>Initializes a new instance of the <see cref="MetadataInterceptor"/> class.</summary>
         /// <param name="service">The Live Music Archive service.</param>
         /// <param name="metadataFactory">Lidarr's metadata consumers, where this plugin's settings live.</param>
         /// <param name="configService">Lidarr's configuration, for a custom metadata server address.</param>
-        /// <param name="httpClient">Lidarr's HTTP client, to fetch the artist for a show.</param>
         /// <param name="logger">The logger.</param>
         public MetadataInterceptor(Lazy<ILiveMusicArchiveService> service,
                                    Lazy<IMetadataFactory> metadataFactory,
                                    Lazy<IConfigService> configService,
-                                   Lazy<IHttpClient> httpClient,
                                    Logger logger)
         {
             _service = service;
             _metadataFactory = metadataFactory;
             _configService = configService;
-            _httpClient = httpClient;
             _logger = logger;
         }
 
-        /// <inheritdoc />
-        public HttpRequest PreRequest(HttpRequest request) => request;
+        /// <summary>
+        /// Turns Lidarr's request for one of our shows into a request for the show's artist. The metadata server
+        /// has never heard of our album ids, so the album request could only come back 404, and the artist is
+        /// what a show is built from anyway: one request per show instead of a wasted one plus an artist fetch.
+        /// </summary>
+        /// <param name="request">The request Lidarr is about to send.</param>
+        /// <returns>The same request, pointed at the artist when it was for a show.</returns>
+        public HttpRequest PreRequest(HttpRequest request)
+        {
+            if (request.Headers.ContainsKey(InternalHeader) || !IsMetadataServer(request.Url))
+            {
+                return request;
+            }
+
+            var albumMatch = AlbumRoute.Match(request.Url.Path);
+            if (!albumMatch.Success || !SyntheticIds.TryParseAlbumId(albumMatch.Groups[1].Value, out var artistMbid, out _) || GetSettings() == null)
+            {
+                return request;
+            }
+
+            var url = request.Url.FullUri;
+            request.Url = new HttpUri(url[..url.LastIndexOf("/album/", StringComparison.Ordinal)] + "/artist/" + artistMbid);
+            request.Headers.Set(ShowHeader, albumMatch.Groups[1].Value);
+            return request;
+        }
 
         /// <summary>Adds shows to artist responses and answers synthetic album requests.</summary>
         /// <param name="response">The response Lidarr received.</param>
@@ -66,9 +86,9 @@ namespace Lidarr.Plugin.LiveMusicArchive.Metadata
                 return response;
             }
 
+            var showId = request.Headers.ContainsKey(ShowHeader) ? request.Headers[ShowHeader] : null;
             var artistMatch = ArtistRoute.Match(request.Url.Path);
-            var albumMatch = AlbumRoute.Match(request.Url.Path);
-            if (!artistMatch.Success && !albumMatch.Success)
+            if (!artistMatch.Success)
             {
                 return response;
             }
@@ -76,25 +96,33 @@ namespace Lidarr.Plugin.LiveMusicArchive.Metadata
             var settings = GetSettings();
             if (settings == null)
             {
-                return response;
+                // Disabled since PreRequest: answer the show request as the metadata server would have.
+                return showId == null ? response : new HttpResponse(request, response.Headers, "", HttpStatusCode.NotFound);
             }
 
             try
             {
-                if (artistMatch.Success && response.StatusCode == HttpStatusCode.OK)
+                if (SyntheticIds.TryParseAlbumId(showId, out _, out var showDate))
+                {
+                    // Anything but the artist (an outage, a removed artist) must not read as "no such album",
+                    // which makes Lidarr delete the show.
+                    if (response.StatusCode != HttpStatusCode.OK)
+                    {
+                        return new HttpResponse(request, response.Headers, "", HttpStatusCode.ServiceUnavailable);
+                    }
+
+                    var album = _service.Value.BuildShow(IaJson.Parse(response.Content), showDate, settings.ToOptions());
+                    return album == null
+                        ? new HttpResponse(request, response.Headers, "", HttpStatusCode.NotFound)
+                        : Replace(response, JsonConvert.SerializeObject(album, SerializerSettings));
+                }
+
+                if (response.StatusCode == HttpStatusCode.OK)
                 {
                     var artist = IaJson.Parse(response.Content);
                     return _service.Value.AddShows(artist, settings.ToOptions())
                         ? Replace(response, artist.ToString(Formatting.None))
                         : response;
-                }
-
-                if (albumMatch.Success && SyntheticIds.TryParseAlbumId(albumMatch.Groups[1].Value, out var artistMbid, out var showDate))
-                {
-                    // Upstream answered 404 for our id; answer with the show instead.
-                    var artist = FetchUpstreamArtist(request, artistMbid);
-                    var album = _service.Value.BuildShow(artist, showDate, settings.ToOptions());
-                    return album == null ? response : Replace(response, JsonConvert.SerializeObject(album, SerializerSettings));
                 }
             }
             catch (Exception ex)
@@ -136,16 +164,6 @@ namespace Lidarr.Plugin.LiveMusicArchive.Metadata
             }
 
             return enabled.FirstOrDefault()?.Settings as LiveMusicArchiveSettings;
-        }
-
-        private JObject FetchUpstreamArtist(HttpRequest albumRequest, string artistMbid)
-        {
-            var url = albumRequest.Url.FullUri;
-            url = url[..url.LastIndexOf("/album/", StringComparison.Ordinal)] + "/artist/" + artistMbid;
-
-            var request = new HttpRequest(url);
-            request.Headers.Set(InternalHeader, "1");
-            return IaJson.Parse(_httpClient.Value.Get(request).Content);
         }
 
         private static HttpResponse Replace(HttpResponse original, string json) =>

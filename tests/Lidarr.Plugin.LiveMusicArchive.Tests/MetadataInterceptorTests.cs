@@ -19,12 +19,11 @@ namespace Lidarr.Plugin.LiveMusicArchive.Tests
         private readonly ILiveMusicArchiveService _service = Substitute.For<ILiveMusicArchiveService>();
         private readonly IMetadataFactory _metadataFactory = Substitute.For<IMetadataFactory>();
         private readonly IConfigService _config = Substitute.For<IConfigService>();
-        private readonly IHttpClient _http = Substitute.For<IHttpClient>();
         private readonly MetadataInterceptor _interceptor;
 
         public MetadataInterceptorTests()
         {
-            _interceptor = new MetadataInterceptor(new(() => _service), new(() => _metadataFactory), new(() => _config), new(() => _http), TestData.Logger);
+            _interceptor = new MetadataInterceptor(new(() => _service), new(() => _metadataFactory), new(() => _config), TestData.Logger);
             Enable(true);
         }
 
@@ -53,20 +52,60 @@ namespace Lidarr.Plugin.LiveMusicArchive.Tests
         }
 
         [Fact]
+        public void a_show_request_is_sent_as_a_request_for_its_artist()
+        {
+            var request = new HttpRequest($"{Upstream}/album/{SyntheticIds.AlbumId(TestData.GratefulDead, "1977-05-08")}");
+
+            var sent = _interceptor.PreRequest(request);
+
+            Assert.Equal($"{Upstream}/artist/{TestData.GratefulDead}", sent.Url.FullUri);
+        }
+
+        [Fact]
         public void answers_synthetic_album_requests_with_the_show()
         {
             var albumId = SyntheticIds.AlbumId(TestData.GratefulDead, "1977-05-08");
-            _http.Get(Arg.Is<HttpRequest>(r => r.Url.FullUri == $"{Upstream}/artist/{TestData.GratefulDead}"))
-                .Returns(ci => Response(ci.Arg<HttpRequest>().Url.FullUri, TestData.Artist().ToString()));
-            _service.BuildShow(Arg.Any<JObject>(), "1977-05-08", Arg.Any<LiveMusicArchiveOptions>())
+            _service.BuildShow(Arg.Is<JObject>(a => a.Value<string>("id") == TestData.GratefulDead), "1977-05-08", Arg.Any<LiveMusicArchiveOptions>())
                 .Returns(new AlbumResource { Id = albumId, Title = "1977-05-08: Barton Hall", Releases = new List<ReleaseResource>() });
 
-            var response = _interceptor.PostResponse(Response($"{Upstream}/album/{albumId}", "{}", HttpStatusCode.NotFound));
+            var response = _interceptor.PostResponse(ShowResponse(albumId, TestData.Artist().ToString()));
 
             Assert.Equal(HttpStatusCode.OK, response.StatusCode);
             Assert.Equal("1977-05-08: Barton Hall", JObject.Parse(response.Content).Value<string>("Title"));
-            // The artist fetch is marked so this interceptor doesn't augment its own request.
-            _http.Received().Get(Arg.Is<HttpRequest>(r => r.Headers.ContainsKey("X-Lidarr-Plugin-LiveMusicArchive")));
+            // The artist response belongs to the show; it isn't also augmented as an artist.
+            _service.DidNotReceiveWithAnyArgs().AddShows(default, default);
+        }
+
+        [Theory]
+        [InlineData(HttpStatusCode.ServiceUnavailable)]
+        [InlineData(HttpStatusCode.NotFound)]
+        public void a_show_whose_artist_cannot_be_fetched_is_reported_unavailable(HttpStatusCode upstream)
+        {
+            var response = _interceptor.PostResponse(ShowResponse(SyntheticIds.AlbumId(TestData.GratefulDead, "1977-05-08"), "", upstream));
+
+            // A 404 would make Lidarr delete the album.
+            Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
+        }
+
+        [Fact]
+        public void show_requests_are_left_alone_when_disabled()
+        {
+            Enable(false);
+            var request = new HttpRequest($"{Upstream}/album/{SyntheticIds.AlbumId(TestData.GratefulDead, "1977-05-08")}");
+
+            Assert.EndsWith("/album/" + SyntheticIds.AlbumId(TestData.GratefulDead, "1977-05-08"), _interceptor.PreRequest(request).Url.FullUri);
+        }
+
+        [Fact]
+        public void a_show_request_answered_after_the_plugin_was_disabled_is_not_found()
+        {
+            var albumId = SyntheticIds.AlbumId(TestData.GratefulDead, "1977-05-08");
+            var sent = _interceptor.PreRequest(new HttpRequest($"{Upstream}/album/{albumId}"));
+            Enable(false);
+
+            var response = _interceptor.PostResponse(new HttpResponse(sent, new HttpHeader(), TestData.Artist().ToString(), HttpStatusCode.OK));
+
+            Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
         }
 
         [Fact]
@@ -138,27 +177,24 @@ namespace Lidarr.Plugin.LiveMusicArchive.Tests
         public void a_failed_show_is_reported_unavailable_not_missing()
         {
             var albumId = SyntheticIds.AlbumId(TestData.GratefulDead, "1977-05-08");
-            _http.Get(Arg.Any<HttpRequest>()).Returns(ci => Response(ci.Arg<HttpRequest>().Url.FullUri, TestData.Artist().ToString()));
             _service.BuildShow(default, default, default).ThrowsForAnyArgs(new HttpRequestException("archive.org down"));
 
-            var response = _interceptor.PostResponse(Response($"{Upstream}/album/{albumId}", "{}", HttpStatusCode.NotFound));
+            var response = _interceptor.PostResponse(ShowResponse(albumId, TestData.Artist().ToString()));
 
             // A 404 would make Lidarr delete the album.
             Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
         }
 
         [Fact]
-        public void a_show_that_no_longer_exists_still_passes_the_404_through()
+        public void a_show_that_no_longer_exists_is_not_found()
         {
-            var albumId = SyntheticIds.AlbumId(TestData.GratefulDead, "1977-05-08");
-            _http.Get(Arg.Any<HttpRequest>()).Returns(ci => Response(ci.Arg<HttpRequest>().Url.FullUri, TestData.Artist().ToString()));
-            var original = Response($"{Upstream}/album/{albumId}", "{}", HttpStatusCode.NotFound);
+            var response = _interceptor.PostResponse(ShowResponse(SyntheticIds.AlbumId(TestData.GratefulDead, "1977-05-08"), TestData.Artist().ToString()));
 
-            Assert.Same(original, _interceptor.PostResponse(original));
+            Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
         }
 
         [Fact]
-        public void requests_pass_through_unchanged()
+        public void other_requests_pass_through_unchanged()
         {
             var request = new HttpRequest($"{Upstream}/artist/{TestData.GratefulDead}");
 
@@ -173,5 +209,9 @@ namespace Lidarr.Plugin.LiveMusicArchive.Tests
 
         private static HttpResponse Response(string url, string content, HttpStatusCode status = HttpStatusCode.OK) =>
             new(new HttpRequest(url), new HttpHeader(), content, status);
+
+        // The metadata server's answer to a show request, after PreRequest turned it into an artist request.
+        private HttpResponse ShowResponse(string albumId, string content, HttpStatusCode status = HttpStatusCode.OK) =>
+            new(_interceptor.PreRequest(new HttpRequest($"{Upstream}/album/{albumId}")), new HttpHeader(), content, status);
     }
 }

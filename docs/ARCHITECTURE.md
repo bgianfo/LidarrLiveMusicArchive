@@ -140,9 +140,9 @@ Lidarr                        MetadataInterceptor              LiveMusicArchiveS
   │◀── modified response ───────────│                                   │
   │ filter by metadata profile
   │ for each album: GET {metadata}/album/{id}
-  │────────────────────────────────▶│ upstream answered 404 for lma-…   │
-  │                                 │ fetch upstream artist (marked so  │
-  │                                 │ it is not re-augmented)           │
+  │────────────────────────────────▶│ PreRequest: lma-… album requests  │
+  │                                 │ are sent as artist/{mbid} instead │
+  │                                 │ (response from api.lidarr.audio)  │
   │                                 │ BuildShow(artist, date) ─────────▶│ top N recordings by downloads
   │                                 │                                   │ item metadata (cached, change-aware)
   │                                 │                                   │ map to releases, order them
@@ -153,9 +153,16 @@ The interceptor acts only on responses from `api.lidarr.audio` or from the host 
 `MetadataSource` setting, and only on the `artist/{mbid}` and `album/lma-…` routes. All other traffic
 passes through unchanged.
 
+The metadata server has never heard of `lma-` album ids, so asking it for one could only return 404.
+`PreRequest` therefore rewrites such a request into a request for the show's artist, which is what a show
+is built from, and tags it with a header carrying the album id; `PostResponse` sees the tag and answers with
+the show. Each show costs one upstream request instead of a wasted 404 followed by an artist fetch, which
+saved 0.2–0.4 s per show (several minutes for a large catalogue). If the artist request fails, the show
+request is answered `503`, never `404`.
+
 If processing fails, the interceptor answers `503`. Passing the upstream response through would be
-harmful: without the plugin's shows the artist appears to have lost them, and `lma-` album ids return
-404 upstream, and Lidarr deletes albums in both cases (section 5.2). On a 503 Lidarr logs the failure,
+harmful: without the plugin's shows the artist appears to have lost them, and a show request would carry
+the bare artist or a 404, and Lidarr deletes albums in both cases (section 5.2). On a 503 Lidarr logs the failure,
 changes nothing, and retries on the next refresh.
 
 Because the plugin edits responses instead of replacing the provider, it works with Lidarr's
