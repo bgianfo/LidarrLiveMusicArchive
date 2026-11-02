@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    End-to-end tests: a real Lidarr process with the freshly built plugin, against local fakes of archive.org and
+    Lidarr's metadata server. Opt-in (set LMA_E2E=1), because they download Lidarr and take a few minutes.
+    See docs/TESTING.md.
+  -->
+  <PropertyGroup>
+    <IsPackable>false</IsPackable>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+    <PackageReference Include="xunit" Version="2.9.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- Build the plugin first, but don't reference it: the tests install its output into Lidarr. -->
+    <ProjectReference Include="../../src/Lidarr.Plugin.LiveMusicArchive/Lidarr.Plugin.LiveMusicArchive.csproj" ReferenceOutputAssembly="false" />
+  </ItemGroup>
+  <ItemGroup>
+    <AssemblyMetadata Include="PluginOutputDirectory" Value="$(MSBuildThisFileDirectory)../../src/Lidarr.Plugin.LiveMusicArchive/bin/$(Configuration)/$(TargetFramework)/" />
+    <AssemblyMetadata Include="LidarrVersion" Value="$(LidarrVersion)" />
+    <AssemblyMetadata Include="CacheDirectory" Value="$(MSBuildThisFileDirectory)../../.e2e/" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- Real (tiny) audio files, shared with the unit tests. -->
+    <None Include="../Lidarr.Plugin.LiveMusicArchive.Tests/Fixtures/tone.flac;../Lidarr.Plugin.LiveMusicArchive.Tests/Fixtures/tone.m4a;../Lidarr.Plugin.LiveMusicArchive.Tests/Fixtures/archive-derivative-head.mp3" Link="Audio/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>

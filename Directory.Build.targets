@@ -11,7 +11,7 @@
   </PropertyGroup>
 
   <!-- Lidarr runs on .NET 8, and CI tests on it; locally, a machine with only a newer runtime can still run the tests. -->
-  <PropertyGroup Condition="'$(MSBuildProjectName)'=='Lidarr.Plugin.LiveMusicArchive.Tests'">
+  <PropertyGroup Condition="'$(MSBuildProjectName)'=='Lidarr.Plugin.LiveMusicArchive.Tests' or '$(MSBuildProjectName)'=='Lidarr.Plugin.LiveMusicArchive.EndToEnd'">
     <RollForward>Major</RollForward>
   </PropertyGroup>
 
