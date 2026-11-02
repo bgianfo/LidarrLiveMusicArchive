@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using Lidarr.Plugin.LiveMusicArchive.Core.Http;
 using Newtonsoft.Json.Linq;
 
 namespace Lidarr.Plugin.LiveMusicArchive.Core
@@ -37,7 +38,7 @@ namespace Lidarr.Plugin.LiveMusicArchive.Core
 
             return best.Name == null
                 ? null
-                : $"https://archive.org/download/{Uri.EscapeDataString(best.Identifier)}/{string.Join("/", best.Name.Split('/').Select(Uri.EscapeDataString))}";
+                : $"{ArchiveOrgEndpoints.BaseUrl}/download/{Uri.EscapeDataString(best.Identifier)}/{string.Join("/", best.Name.Split('/').Select(Uri.EscapeDataString))}";
         }
     }
 }

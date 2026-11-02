@@ -95,7 +95,7 @@ namespace Lidarr.Plugin.LiveMusicArchive.Core
 
             do
             {
-                var url = "https://archive.org/services/search/v1/scrape" +
+                var url = $"{ArchiveOrgEndpoints.BaseUrl}/services/search/v1/scrape" +
                           $"?q={Uri.EscapeDataString(query)}&fields={FieldsFor(query, ScrapeFields)}&count=10000" +
                           (cursor != null ? $"&cursor={Uri.EscapeDataString(cursor)}" : "");
                 var page = GetJson(url, Jittered(url, CollectionTtl, 0.10), changedAt: null, (answer, _) => !Items(answer).Any() || InCollection(answer, collection).Any());
@@ -111,7 +111,7 @@ namespace Lidarr.Plugin.LiveMusicArchive.Core
         public string FindCollectionByCreator(string creator)
         {
             var query = $"creator:\"{CreatorPhrase(creator)}\" AND collection:etree AND mediatype:etree";
-            var url = $"https://archive.org/services/search/v1/scrape?q={Uri.EscapeDataString(query)}&fields={FieldsFor(query, CreatorFields)}&count=100";
+            var url = $"{ArchiveOrgEndpoints.BaseUrl}/services/search/v1/scrape?q={Uri.EscapeDataString(query)}&fields={FieldsFor(query, CreatorFields)}&count=100";
             // A phrase search often finds only other creators (tribute bands for "Phish"), and SameArtist decides
             // whether any result is this artist, so such an answer is believable, and cached, on its own. It is not
             // believable as a replacement for a cached answer that did find the artist: that is what another query's
@@ -174,7 +174,7 @@ namespace Lidarr.Plugin.LiveMusicArchive.Core
         /// <inheritdoc />
         public JObject GetItemMetadata(string identifier, DateTimeOffset? updatedAt = null)
         {
-            var url = $"https://archive.org/metadata/{Uri.EscapeDataString(identifier)}";
+            var url = $"{ArchiveOrgEndpoints.BaseUrl}/metadata/{Uri.EscapeDataString(identifier)}";
             bool IsThisItem(JObject item) => IaJson.First(item["metadata"]?["identifier"]) == identifier;
 
             // Unlike an empty listing, metadata for the wrong item (or none, for a missing one) is never usable.
@@ -186,12 +186,12 @@ namespace Lidarr.Plugin.LiveMusicArchive.Core
         public Task DownloadFileAsync(string identifier, string fileName, string destination, CancellationToken cancellationToken)
         {
             var path = string.Join("/", fileName.Split('/').Select(Uri.EscapeDataString));
-            return _http.DownloadFileAsync($"https://archive.org/download/{Uri.EscapeDataString(identifier)}/{path}", destination, cancellationToken);
+            return _http.DownloadFileAsync($"{ArchiveOrgEndpoints.BaseUrl}/download/{Uri.EscapeDataString(identifier)}/{path}", destination, cancellationToken);
         }
 
         /// <inheritdoc />
         public void Ping() =>
-            _http.GetStringAsync("https://archive.org/services/search/v1/scrape?q=collection%3Aetree&fields=identifier&count=100", CancellationToken.None)
+            _http.GetStringAsync($"{ArchiveOrgEndpoints.BaseUrl}/services/search/v1/scrape?q=collection%3Aetree&fields=identifier&count=100", CancellationToken.None)
                 .GetAwaiter().GetResult();
 
         /// <summary>
