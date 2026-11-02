@@ -406,8 +406,13 @@ recordings. `Artwork` picks the album cover from the show's recordings, most dow
 Spectrogram PNGs and archive.org's generated `__ia_thumb.jpg` are never used. The collection image
 (`/services/img/{collection}`) is a 180×180 logo and is not used either. Selection costs no requests,
 because the file lists are already fetched. The chosen URL is published as the album's `Cover` image,
-and Lidarr downloads it. Shows without artwork get Lidarr's placeholder. If artwork disappears from
-archive.org, the saved show's image is reused.
+and Lidarr downloads it. If artwork disappears from archive.org, the saved show's image is reused.
+
+Shows with no artwork (most of them) get the band's picture instead: `ShowMapper.BandCover` takes the
+artist's `Poster`, or else its `Fanart`, from the artist response Lidarr's metadata server already sent,
+and publishes it as the album's `Cover`. Every such show of a band has the same cover. archive.org's own
+spectrograms were considered and rejected: they are 800×200 waveforms of single tracks, which players
+crop to a sliver.
 
 ## 9. Configuration
 

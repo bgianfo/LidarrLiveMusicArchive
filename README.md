@@ -11,7 +11,7 @@ archive.org and tags them so Lidarr imports them like any other album.
   each song is a track.
 - **Search and download.** An indexer finds a show's recordings. A download client fetches the format
   your quality profile prefers (FLAC or MP3) and checks every file against archive.org's checksums.
-- **Cover art**, where a taper uploaded artwork with the recording.
+- **Cover art** from artwork the taper uploaded with the recording, or otherwise the band's picture.
 - **Nothing disappears.** Shows and recordings that archive.org later removes stay in Lidarr, marked as
   removed.
 
