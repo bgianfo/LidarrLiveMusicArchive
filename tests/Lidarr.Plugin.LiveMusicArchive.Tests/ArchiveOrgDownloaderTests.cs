@@ -50,8 +50,8 @@ namespace Lidarr.Plugin.LiveMusicArchive.Tests
 
             await _downloader.RunAsync(_folder, CancellationToken.None);
 
-            _tagger.Received(1).Tag(Path.Combine(Path.GetFullPath(_folder), "t01.flac"), Arg.Any<DownloadManifest>());
-            _tagger.Received(1).Tag(Path.Combine(Path.GetFullPath(_folder), "t02.flac"), Arg.Any<DownloadManifest>());
+            _tagger.Received(1).Tag(Path.Combine(Path.GetFullPath(_folder), "t01.flac"), Arg.Any<DownloadManifest>(), Arg.Any<ManifestFile>());
+            _tagger.Received(1).Tag(Path.Combine(Path.GetFullPath(_folder), "t02.flac"), Arg.Any<DownloadManifest>(), Arg.Any<ManifestFile>());
         }
 
         [Fact]
@@ -62,7 +62,7 @@ namespace Lidarr.Plugin.LiveMusicArchive.Tests
 
             await _downloader.RunAsync(_folder, CancellationToken.None);
 
-            _tagger.DidNotReceiveWithAnyArgs().Tag(default, default);
+            _tagger.DidNotReceiveWithAnyArgs().Tag(default, default, default);
         }
 
         [Fact]
@@ -191,7 +191,7 @@ namespace Lidarr.Plugin.LiveMusicArchive.Tests
         {
             var tagStarted = new TaskCompletionSource();
             var releaseTag = new ManualResetEventSlim();
-            _tagger.When(t => t.Tag(Arg.Any<string>(), Arg.Any<DownloadManifest>())).Do(_ =>
+            _tagger.When(t => t.Tag(Arg.Any<string>(), Arg.Any<DownloadManifest>(), Arg.Any<ManifestFile>())).Do(_ =>
             {
                 tagStarted.TrySetResult();
                 releaseTag.Wait(TimeSpan.FromSeconds(10));
@@ -211,7 +211,7 @@ namespace Lidarr.Plugin.LiveMusicArchive.Tests
             await cancel.WaitAsync(TimeSpan.FromSeconds(5));
 
             // The second tag and the "completed" manifest save were skipped.
-            _tagger.Received(1).Tag(Arg.Any<string>(), Arg.Any<DownloadManifest>());
+            _tagger.Received(1).Tag(Arg.Any<string>(), Arg.Any<DownloadManifest>(), Arg.Any<ManifestFile>());
             Assert.False(DownloadManifest.Load(_folder).Completed);
         }
 

@@ -79,7 +79,7 @@ namespace Lidarr.Plugin.LiveMusicArchive.Download
                 AlbumId = album?.ForeignAlbumId,
                 // Shows this plugin created have a release per recording; MusicBrainz shows don't.
                 ReleaseId = SyntheticIds.TryParseAlbumId(album?.ForeignAlbumId, out _, out _) ? SyntheticIds.ReleaseId(identifier) : null,
-                Files = files.Select(f => new ManifestFile { Name = f.Name, Size = f.Size, Md5 = f.Md5 }).ToList()
+                Files = ManifestFiles(identifier, files, isPluginShow: SyntheticIds.TryParseAlbumId(album?.ForeignAlbumId, out _, out _))
             };
 
             var folder = Path.Combine(Settings.DownloadPath, FolderName(release.Title, manifest.DownloadId));
@@ -139,6 +139,29 @@ namespace Lidarr.Plugin.LiveMusicArchive.Download
             IsLocalhost = true,
             OutputRootFolders = new List<OsPath> { new(Settings.DownloadPath) }
         };
+
+        /// <summary>
+        /// The files to download, each with the track identity to tag it with. The identities come from the same
+        /// mapping as the release's track list, so Lidarr matches every file to its track exactly.
+        /// </summary>
+        /// <param name="identifier">The archive.org identifier.</param>
+        /// <param name="files">The files of the chosen format, in playback order.</param>
+        /// <param name="isPluginShow">Whether the album is one of this plugin's shows; only those have its recording ids.</param>
+        /// <returns>The manifest entries.</returns>
+        internal static List<ManifestFile> ManifestFiles(string identifier, IReadOnlyList<AudioFile> files, bool isPluginShow)
+        {
+            var tracks = ShowMapper.Tracks(identifier, null, files);
+            return files.Zip(tracks, (f, t) => new ManifestFile
+            {
+                Name = f.Name,
+                Size = f.Size,
+                Md5 = f.Md5,
+                Title = t.TrackName,
+                TrackNumber = t.TrackPosition,
+                Disc = t.MediumNumber,
+                RecordingId = isPluginShow ? t.RecordingId : null
+            }).ToList();
+        }
 
         /// <summary>A stable id for a recording in one format.</summary>
         /// <param name="identifier">The archive.org identifier.</param>
