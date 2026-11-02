@@ -82,8 +82,8 @@ The plugin adds its download protocol to your delay profiles automatically on st
 
 ### 4. Optional: quality and tags
 
-- **Quality profile.** Recordings are offered as **FLAC**, **FLAC 24bit** and **MP3-VBR-V0**, so allow the
-  ones you want. To have FLAC replace an MP3 automatically when one appears, enable **Upgrades Allowed**
+- **Quality profile.** Recordings are offered as **FLAC**, **FLAC 24bit**, **MP3-VBR-V0** and, for uploads
+  that only have `.m4a` files, **AAC** or **ALAC**, so allow the ones you want. To have FLAC replace an MP3 automatically when one appears, enable **Upgrades Allowed**
   with **FLAC** as the cutoff.
 - **Tags.** With **Settings → Metadata → Tag Audio Files with Metadata** set to anything other than
   *Never*, Lidarr writes the show's title, date, disc and track numbers and cover art into the files, which
@@ -119,7 +119,8 @@ appear on archive.org.
 | "Download path is not writable" | The Lidarr user can't write to the Download Path. |
 | Downloads import twice, or files vanish from the download folder | The Download Path is inside a Lidarr root folder. |
 | Releases rejected with "Existing files meets cutoff" | Lidarr already has files for that show, and your quality profile doesn't allow upgrades. |
-| A recording only offers MP3 | Its lossless files are restricted on archive.org (stream-only), or they are Shorten (`.shn`), which Lidarr can't import. |
+| A recording only offers MP3 or AAC | Its lossless files are restricted on archive.org (stream-only), or they are Shorten (`.shn`), which Lidarr can't import. |
+| A show is missing although archive.org has it | None of its recordings has a format Lidarr can import (for example only Shorten). It reappears when archive.org adds another recording. |
 
 Lidarr's log (**System → Logs**) records the plugin's activity under `LiveMusicArchiveService`,
 `MetadataInterceptor`, `ArchiveOrgClient`, `ArchiveOrgHttp`, `ArchiveOrgDownloader` and `TrackTagger`.
