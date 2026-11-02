@@ -5,8 +5,19 @@ namespace Lidarr.Plugin.LiveMusicArchive.Core.Downloads
     /// <summary>A file the manifest expects to find in the download folder.</summary>
     public class ManifestFile
     {
-        /// <summary>Gets or sets the file name relative to the archive.org item, and to the download folder.</summary>
+        /// <summary>Gets or sets the file name relative to the archive.org item, which may contain sub-folders.</summary>
         public string Name { get; set; }
+
+        /// <summary>
+        /// Gets or sets the file's name in the download folder, or null to use <see cref="Name"/> (manifests written
+        /// before 0.0.5). Downloads are flat: Lidarr groups files into albums by folder, so a recording kept in
+        /// archive.org's disc sub-folders ("…d1.shnf/", "…d2.shnf/") would import as two incomplete albums.
+        /// </summary>
+        public string LocalName { get; set; }
+
+        /// <summary>Gets the file's path relative to the download folder.</summary>
+        [JsonIgnore]
+        public string DiskName => LocalName ?? Name;
 
         /// <summary>Gets or sets the expected size in bytes, or 0 when archive.org doesn't publish one.</summary>
         public long Size { get; set; }
@@ -122,7 +133,7 @@ namespace Lidarr.Plugin.LiveMusicArchive.Core.Downloads
             long done = 0;
             foreach (var file in Files)
             {
-                var path = LocalPath(folder, file.Name);
+                var path = LocalPath(folder, file.DiskName);
                 var size = File.Exists(path) ? new FileInfo(path).Length : File.Exists(path + ".part") ? new FileInfo(path + ".part").Length : 0;
                 done += file.Size > 0 ? Math.Min(size, file.Size) : 0;
             }

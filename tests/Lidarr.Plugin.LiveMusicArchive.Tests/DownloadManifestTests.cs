@@ -52,6 +52,16 @@ namespace Lidarr.Plugin.LiveMusicArchive.Tests
             Assert.Equal(0, manifest.RemainingSize(_folder));
         }
 
+        [Fact]
+        public void older_manifests_without_local_names_keep_the_archive_path()
+        {
+            var file = new ManifestFile { Name = "d1/t01.flac" };
+
+            Assert.Equal("d1/t01.flac", file.DiskName);
+            file.LocalName = "t01.flac";
+            Assert.Equal("t01.flac", file.DiskName);
+        }
+
         [Theory]
         [InlineData("../escape.flac")]
         [InlineData("d1/../../escape.flac")]
