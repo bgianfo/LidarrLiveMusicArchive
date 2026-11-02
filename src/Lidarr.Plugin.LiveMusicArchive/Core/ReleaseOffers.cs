@@ -1,4 +1,5 @@
 using System.Globalization;
+using Lidarr.Plugin.LiveMusicArchive.Core.Http;
 using Newtonsoft.Json.Linq;
 using NzbDrone.Common.Extensions;
 using NzbDrone.Core.Parser.Model;
@@ -53,7 +54,7 @@ namespace Lidarr.Plugin.LiveMusicArchive.Core
                     Album = albumTitle,
                     Size = x.Files.Sum(f => f.Size),
                     DownloadUrl = DownloadUrl(identifier, x.Format),
-                    InfoUrl = $"https://archive.org/details/{Uri.EscapeDataString(identifier)}",
+                    InfoUrl = $"{ArchiveOrgEndpoints.BaseUrl}/details/{Uri.EscapeDataString(identifier)}",
                     PublishDate = published,
                     Codec = QualityTag(x.Format, x.Files).Split(' ')[0],
                     Container = x.Format == AudioFiles.MPEG4Audio ? "M4A" : x.Format.Contains("Flac", StringComparison.Ordinal) ? "FLAC" : "MP3"
@@ -97,8 +98,8 @@ namespace Lidarr.Plugin.LiveMusicArchive.Core
                     Artist = artistName,
                     Album = albumTitle,
                     Size = files.Sum(f => long.TryParse(IaJson.First(f["size"]), NumberStyles.Integer, CultureInfo.InvariantCulture, out var s) ? s : 0),
-                    DownloadUrl = $"https://archive.org/download/{Uri.EscapeDataString(identifier)}/{Uri.EscapeDataString(IaJson.First(torrent["name"]))}",
-                    InfoUrl = $"https://archive.org/details/{Uri.EscapeDataString(identifier)}",
+                    DownloadUrl = $"{ArchiveOrgEndpoints.BaseUrl}/download/{Uri.EscapeDataString(identifier)}/{Uri.EscapeDataString(IaJson.First(torrent["name"]))}",
+                    InfoUrl = $"{ArchiveOrgEndpoints.BaseUrl}/details/{Uri.EscapeDataString(identifier)}",
                     PublishDate = ParsePublishDate(IaJson.First(metadata["publicdate"]) ?? IaJson.First(metadata["addeddate"])),
                     // archive.org always web-seeds its torrents, so there is at least one source.
                     Seeders = 1,
@@ -146,7 +147,7 @@ namespace Lidarr.Plugin.LiveMusicArchive.Core
         /// <param name="format">The archive.org format to download.</param>
         /// <returns>An archive.org details URL carrying the format.</returns>
         public static string DownloadUrl(string identifier, string format) =>
-            $"https://archive.org/details/{Uri.EscapeDataString(identifier)}?{FormatParameter}={Uri.EscapeDataString(format)}";
+            $"{ArchiveOrgEndpoints.BaseUrl}/details/{Uri.EscapeDataString(identifier)}?{FormatParameter}={Uri.EscapeDataString(format)}";
 
         /// <summary>Reads the identifier and format back out of a <see cref="DownloadUrl"/>.</summary>
         /// <param name="url">The download URL.</param>
@@ -157,7 +158,7 @@ namespace Lidarr.Plugin.LiveMusicArchive.Core
         {
             identifier = format = null;
             if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) ||
-                uri.Host != "archive.org" ||
+                (uri.Host != "archive.org" && uri.Host != new Uri(ArchiveOrgEndpoints.BaseUrl).Host) ||
                 !uri.AbsolutePath.StartsWith("/details/", StringComparison.Ordinal))
             {
                 return false;

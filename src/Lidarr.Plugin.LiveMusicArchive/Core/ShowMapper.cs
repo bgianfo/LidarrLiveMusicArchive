@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text.RegularExpressions;
+using Lidarr.Plugin.LiveMusicArchive.Core.Http;
 using Newtonsoft.Json.Linq;
 using NzbDrone.Core.MetadataSource.SkyHook.Resource;
 
@@ -89,7 +90,7 @@ namespace Lidarr.Plugin.LiveMusicArchive.Core
                 Images = new List<ImageResource>(),
                 Links = new List<LinkResource>
                 {
-                    new() { Type = "archive", Target = $"https://archive.org/search?query={Uri.EscapeDataString($"collection:{collection} AND date:{date}")}" }
+                    new() { Type = "archive", Target = $"{ArchiveOrgEndpoints.BaseUrl}/search?query={Uri.EscapeDataString($"collection:{collection} AND date:{date}")}" }
                 },
                 Rating = new RatingResource(),
                 Releases = releaseList
