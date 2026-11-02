@@ -161,6 +161,80 @@ namespace Lidarr.Plugin.LiveMusicArchive.Tests
         }
 
         [Fact]
+        public async Task shows_download_one_at_a_time_in_the_order_they_were_started()
+        {
+            var second = _folder + "-second";
+            try
+            {
+                var firstFile = new TaskCompletionSource();
+                _client.DownloadFileAsync("gd77", "a.flac", Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(async ci =>
+                {
+                    await firstFile.Task;
+                    File.WriteAllText(ci.ArgAt<string>(2), "one");
+                });
+                ServeFiles(("b.flac", "two"));
+                Manifest(("a.flac", "one")).Save(_folder);
+                Manifest(("b.flac", "two")).Save(second);
+
+                _downloader.Start(_folder);
+                await WaitUntil(() => _client.ReceivedCalls().Any());
+                _downloader.Start(second);
+                await WaitUntil(() => _downloader.IsWaiting(second));
+
+                // The second show touches nothing until the first is done.
+                await Task.Delay(100);
+                await _client.DidNotReceive().DownloadFileAsync("gd77", "b.flac", Arg.Any<string>(), Arg.Any<CancellationToken>());
+                Assert.False(_downloader.IsWaiting(_folder));
+
+                firstFile.SetResult();
+                await WaitUntil(() => !_downloader.IsRunning(second));
+
+                Assert.True(DownloadManifest.Load(_folder).Completed);
+                Assert.True(DownloadManifest.Load(second).Completed);
+                Assert.False(_downloader.IsWaiting(second));
+            }
+            finally
+            {
+                Directory.Delete(second, true);
+            }
+        }
+
+        [Fact]
+        public async Task cancelling_a_waiting_show_leaves_it_untouched_and_the_running_one_unaffected()
+        {
+            var second = _folder + "-second";
+            try
+            {
+                var firstFile = new TaskCompletionSource();
+                _client.DownloadFileAsync("gd77", "a.flac", Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(async ci =>
+                {
+                    await firstFile.Task;
+                    File.WriteAllText(ci.ArgAt<string>(2), "one");
+                });
+                Manifest(("a.flac", "one")).Save(_folder);
+                Manifest(("b.flac", "two")).Save(second);
+                _downloader.Start(_folder);
+                await WaitUntil(() => _client.ReceivedCalls().Any());
+                _downloader.Start(second);
+                await WaitUntil(() => _downloader.IsWaiting(second));
+
+                _downloader.Cancel(second);
+
+                Assert.False(_downloader.IsWaiting(second));
+                Assert.False(DownloadManifest.Load(second).Completed);
+                Assert.Null(DownloadManifest.Load(second).Error);
+                firstFile.SetResult();
+                await WaitUntil(() => !_downloader.IsRunning(_folder));
+                Assert.True(DownloadManifest.Load(_folder).Completed);
+                await _client.DidNotReceive().DownloadFileAsync("gd77", "b.flac", Arg.Any<string>(), Arg.Any<CancellationToken>());
+            }
+            finally
+            {
+                Directory.Delete(second, true);
+            }
+        }
+
+        [Fact]
         public async Task a_cancelled_download_writes_nothing_even_if_a_request_outlives_the_cancel()
         {
             var gate = new TaskCompletionSource();
@@ -248,6 +322,16 @@ namespace Lidarr.Plugin.LiveMusicArchive.Tests
                         return Task.CompletedTask;
                     });
             }
+        }
+
+        private static async Task WaitUntil(Func<bool> condition)
+        {
+            for (var i = 0; i < 200 && !condition(); i++)
+            {
+                await Task.Delay(25);
+            }
+
+            Assert.True(condition());
         }
 
         private static string Md5(string content) => Convert.ToHexString(MD5.HashData(Encoding.UTF8.GetBytes(content))).ToLowerInvariant();

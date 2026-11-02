@@ -232,6 +232,7 @@ Lidarr ── Download(RemoteAlbum) ──▶ ArchiveOrgDownloadClient
                                       │ file list for that format (AudioFiles)
                                       │ write {DownloadPath}/{title} ({id})/.archiveorg-download.json
                                       └─▶ ArchiveOrgDownloader.Start(folder)   (background task)
+                                             wait for the show ahead to finish (Queued)
                                              for each file: skip if intact (MD5, else size)
                                                             download (resumable, throttled)
                                                             verify MD5; up to 3 attempts
@@ -240,6 +241,12 @@ Lidarr ── Download(RemoteAlbum) ──▶ ArchiveOrgDownloadClient
 Lidarr ── GetItems() (polled) ────▶ one queue item per folder with a manifest
 Lidarr imports the folder once the item is Completed
 ```
+
+**One show at a time.** Lidarr hands every grab to the download client at once and only polls for
+progress afterwards; ordering and concurrency are always the client's job (SABnzbd and qBittorrent have
+their own queues). So the downloader runs one show at a time, in the order they were grabbed, and its files
+one after another. Shows waiting their turn are reported as `Queued`. Each show is ready to import as soon
+as possible instead of every show in the queue finishing near the end, and archive.org sees one transfer.
 
 The download client keeps no state in memory beyond the running tasks. The queue is rebuilt from
 the manifests on disk. A manifest found incomplete and not running, for example after a restart, is
@@ -301,7 +308,7 @@ the queue.
 |---|---|
 | Concurrent API requests | 1 |
 | Spacing between API request starts | 1 s |
-| Concurrent file downloads (across all queued downloads) | 2 |
+| Concurrent file downloads (across all queued downloads) | 2, but the downloader runs one show and one file at a time (section 5.4) |
 | Spacing between download starts | 1 s |
 
 archive.org publishes no limits. Its only example is `parallel -j4 --delay 1`, and these values are

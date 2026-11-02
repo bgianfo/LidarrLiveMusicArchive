@@ -204,6 +204,7 @@ namespace Lidarr.Plugin.LiveMusicArchive.Download
         {
             var status = manifest.Completed ? DownloadItemStatus.Completed
                 : manifest.Error != null ? DownloadItemStatus.Failed
+                : _downloader.IsWaiting(folder) ? DownloadItemStatus.Queued
                 : DownloadItemStatus.Downloading;
 
             return new DownloadClientItem

@@ -16,6 +16,11 @@ namespace Lidarr.Plugin.LiveMusicArchive.Core.Downloads
         /// <returns>True while the background task runs.</returns>
         bool IsRunning(string folder);
 
+        /// <summary>Whether a download is waiting for the one before it to finish.</summary>
+        /// <param name="folder">The download folder.</param>
+        /// <returns>True while it waits its turn.</returns>
+        bool IsWaiting(string folder);
+
         /// <summary>
         /// Stops a running download, if any, and waits for it to finish. Short writes (creating folders, tagging,
         /// saving the manifest) share a lock with this method: one in progress completes before it returns, and
@@ -30,6 +35,9 @@ namespace Lidarr.Plugin.LiveMusicArchive.Core.Downloads
     /// <summary>
     /// Downloads every file listed in a <see cref="DownloadManifest"/>, skipping files already present
     /// and intact, verifying MD5 checksums, retrying failed files, and finally tagging them for import.
+    /// One show downloads at a time, in the order they were started, and its files one after another, so
+    /// archive.org sees a single transfer and each show is ready to import as soon as possible instead of
+    /// every show in the queue finishing near the end.
     /// </summary>
     public class ArchiveOrgDownloader : IArchiveOrgDownloader
     {
@@ -43,6 +51,10 @@ namespace Lidarr.Plugin.LiveMusicArchive.Core.Downloads
         private readonly ITrackTagger _tagger;
         private readonly Logger _logger;
         private readonly ConcurrentDictionary<string, Job> _running = new();
+        private readonly ConcurrentDictionary<string, byte> _waiting = new();
+
+        // The one download allowed to transfer files. Async waiters on a SemaphoreSlim are served in arrival order.
+        private readonly SemaphoreSlim _turn = new(1, 1);
 
         /// <summary>Initializes a new instance of the <see cref="ArchiveOrgDownloader"/> class.</summary>
         /// <param name="client">The archive.org client used to fetch files.</param>
@@ -65,6 +77,9 @@ namespace Lidarr.Plugin.LiveMusicArchive.Core.Downloads
         /// <inheritdoc />
         public bool IsRunning(string folder) =>
             _running.TryGetValue(Path.GetFullPath(folder), out var job) && !job.Task.IsCompleted;
+
+        /// <inheritdoc />
+        public bool IsWaiting(string folder) => _waiting.ContainsKey(Path.GetFullPath(folder));
 
         /// <inheritdoc />
         public void Cancel(string folder)
@@ -103,6 +118,34 @@ namespace Lidarr.Plugin.LiveMusicArchive.Core.Downloads
                 return;
             }
 
+            var key = Path.GetFullPath(folder);
+            _waiting[key] = 0;
+            try
+            {
+                await _turn.WaitAsync(cancellationToken);
+            }
+            catch (OperationCanceledException)
+            {
+                return;
+            }
+            finally
+            {
+                _waiting.TryRemove(key, out _);
+            }
+
+            try
+            {
+                await DownloadAllAsync(folder, manifest, guard, cancellationToken);
+            }
+            finally
+            {
+                _turn.Release();
+            }
+        }
+
+        // The body of RunAsync, run while this download has its turn.
+        private async Task DownloadAllAsync(string folder, DownloadManifest manifest, WriteGuard guard, CancellationToken cancellationToken)
+        {
             try
             {
                 foreach (var file in manifest.Files)

@@ -153,12 +153,17 @@ namespace Lidarr.Plugin.LiveMusicArchive.Tests
             Save("done", m => m.Completed = true);
             Save("failed", m => m.Error = "Checksum mismatch");
             Save("running", _ => { });
+            Save("waiting", _ => { });
             _downloader.IsRunning(Path.Combine(_root, "running")).Returns(true);
+            _downloader.IsRunning(Path.Combine(_root, "waiting")).Returns(true);
+            _downloader.IsWaiting(Path.Combine(_root, "waiting")).Returns(true);
             Directory.CreateDirectory(Path.Combine(_root, "not-ours"));
 
             var items = _downloadClient.GetItems().ToDictionary(i => i.DownloadId);
 
-            Assert.Equal(3, items.Count);
+            Assert.Equal(4, items.Count);
+            // Waiting for the show ahead of it to finish.
+            Assert.Equal(DownloadItemStatus.Queued, items["waiting"].Status);
             Assert.Equal(DownloadItemStatus.Completed, items["done"].Status);
             Assert.True(items["done"].CanMoveFiles);
             Assert.Equal(0, items["done"].RemainingSize);

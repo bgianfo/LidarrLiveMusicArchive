@@ -131,7 +131,7 @@ The plugin follows archive.org's
 [guidelines for automated access](https://archive.org/developers/bots.html):
 
 - It identifies itself as `Lidarr.Plugin.LiveMusicArchive/<version>`.
-- It makes at most one API request per second and downloads at most two files at a time.
+- It makes at most one API request per second and downloads one file at a time, one show after another.
 - It backs off when archive.org asks it to slow down.
 - It caches results, and refetches a recording's details only when archive.org reports a change.
 
