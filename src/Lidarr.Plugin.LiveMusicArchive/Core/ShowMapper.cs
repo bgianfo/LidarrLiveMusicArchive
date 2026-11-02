@@ -97,6 +97,21 @@ namespace Lidarr.Plugin.LiveMusicArchive.Core
             };
         }
 
+        /// <summary>
+        /// A cover for a show no taper uploaded artwork for: the band's own picture from Lidarr's metadata server,
+        /// so the show isn't blank in Lidarr and in players. archive.org's other images are no use: its
+        /// "spectrograms" are 800×200 waveforms of single tracks, and its thumbnail is the generic etree logo.
+        /// </summary>
+        /// <param name="artist">The artist, as returned by the metadata server.</param>
+        /// <returns>The artist's poster as an album cover, else its fanart; null when it has neither.</returns>
+        public static ImageResource BandCover(ArtistResource artist)
+        {
+            var image = new[] { "Poster", "Fanart" }
+                .Select(type => artist?.Images?.FirstOrDefault(i => string.Equals(i.CoverType, type, StringComparison.OrdinalIgnoreCase) && !string.IsNullOrEmpty(i.Url)))
+                .FirstOrDefault(i => i != null);
+            return image == null ? null : new ImageResource { CoverType = "Cover", Url = image.Url };
+        }
+
         /// <summary>Marks a saved show as no longer on archive.org; it stays in Lidarr with its releases.</summary>
         /// <param name="saved">The saved copy.</param>
         /// <returns>The same show, disambiguated as removed.</returns>

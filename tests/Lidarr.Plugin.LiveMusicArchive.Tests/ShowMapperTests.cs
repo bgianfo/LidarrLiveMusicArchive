@@ -128,5 +128,31 @@ namespace Lidarr.Plugin.LiveMusicArchive.Tests
         public void guesses_lineage(string identifier, string source, string expected) =>
             Assert.Equal(expected, ShowMapper.Lineage(identifier, source));
 
+
+        [Fact]
+        public void band_cover_prefers_the_poster_then_fanart()
+        {
+            var artist = new ArtistResource
+            {
+                Images = new List<ImageResource>
+                {
+                    new() { CoverType = "Logo", Url = "https://x/logo.png" },
+                    new() { CoverType = "Fanart", Url = "https://x/fanart.jpg" },
+                    new() { CoverType = "Poster", Url = "https://x/poster.jpg" }
+                }
+            };
+
+            Assert.Equal("https://x/poster.jpg", ShowMapper.BandCover(artist).Url);
+            artist.Images.RemoveAll(i => i.CoverType == "Poster");
+            Assert.Equal("https://x/fanart.jpg", ShowMapper.BandCover(artist).Url);
+            Assert.Equal("Cover", ShowMapper.BandCover(artist).CoverType);
+        }
+
+        [Fact]
+        public void band_cover_is_null_when_the_artist_has_no_picture()
+        {
+            Assert.Null(ShowMapper.BandCover(new ArtistResource { Images = new List<ImageResource> { new() { CoverType = "Logo", Url = "https://x/logo.png" } } }));
+            Assert.Null(ShowMapper.BandCover(new ArtistResource()));
+        }
     }
 }

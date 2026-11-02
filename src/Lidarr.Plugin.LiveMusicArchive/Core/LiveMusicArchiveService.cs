@@ -155,14 +155,20 @@ namespace Lidarr.Plugin.LiveMusicArchive.Core
                 .ToList();
             var releases = items.Select(x => (ShowMapper.Release(x.Item, artistId, showDate), x.Downloads)).ToList();
 
-            var show = ShowMapper.Album(IaJson.ToResource<ArtistResource>(artist), collection, showDate, ShowCatalog.ShowTitle(showDate, recordings), ShowMapper.OrderReleases(releases));
+            var artistResource = IaJson.ToResource<ArtistResource>(artist);
+            var show = ShowMapper.Album(artistResource, collection, showDate, ShowCatalog.ShowTitle(showDate, recordings), ShowMapper.OrderReleases(releases));
             if (Artwork.Cover(items.Select(x => x.Item)) is { } cover)
             {
                 show.Images.Add(new ImageResource { CoverType = "Cover", Url = cover });
             }
             else if (saved?.Images?.Count > 0)
             {
+                // Artwork from a recording archive.org has since removed, or the band picture from last time.
                 show.Images = saved.Images;
+            }
+            else if (ShowMapper.BandCover(artistResource) is { } bandCover)
+            {
+                show.Images.Add(bandCover);
             }
             show = ShowMapper.KeepRemovedReleases(show, saved, recordings.Select(r => SyntheticIds.ReleaseId(r.Identifier)).ToHashSet());
             _archive.Save(show);

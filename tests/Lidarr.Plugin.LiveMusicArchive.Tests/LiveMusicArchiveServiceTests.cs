@@ -228,6 +228,26 @@ namespace Lidarr.Plugin.LiveMusicArchive.Tests
         }
 
         [Fact]
+        public void a_show_with_taper_artwork_uses_it()
+        {
+            var show = _service.BuildShow(TestData.Artist(), "1977-05-08", Options(""));
+
+            Assert.StartsWith("https://archive.org/download/" + TestData.StreamOnlyFlacItem + "/", Assert.Single(show.Images).Url);
+        }
+
+        [Fact]
+        public void a_show_without_artwork_gets_the_band_picture()
+        {
+            var plain = TestData.SyntheticItem("gd77-05-07.x", new { name = "t01.mp3", format = "VBR MP3", size = "10" });
+            _client.GetItemMetadata("gd77-05-07.x", Arg.Any<DateTimeOffset?>()).Returns(plain);
+
+            var cover = Assert.Single(_service.BuildShow(TestData.Artist(), "1977-05-07", Options("")).Images);
+
+            Assert.Equal("Cover", cover.CoverType);
+            Assert.Equal("https://images.lidarr.audio/cache/https://assets.fanart.tv/fanart/grateful-dead-4fe880af59ba6.jpg", cover.Url);
+        }
+
+        [Fact]
         public void a_tape_removed_from_archive_org_stays_as_a_marked_release()
         {
             _service.BuildShow(TestData.Artist(), "1977-05-08", Options(""));
