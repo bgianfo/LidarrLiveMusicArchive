@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.RegularExpressions;
 using Lidarr.Plugin.LiveMusicArchive.Core.Http;
 using Newtonsoft.Json.Linq;
 using NLog;
@@ -110,7 +111,7 @@ namespace Lidarr.Plugin.LiveMusicArchive.Core
         /// <inheritdoc />
         public string FindCollectionByCreator(string creator)
         {
-            var query = $"creator:\"{CreatorPhrase(creator)}\" AND collection:etree AND mediatype:etree";
+            var query = $"creator:{CreatorQuery(creator)} AND collection:etree AND mediatype:etree";
             var url = $"{ArchiveOrgEndpoints.BaseUrl}/services/search/v1/scrape?q={Uri.EscapeDataString(query)}&fields={FieldsFor(query, CreatorFields)}&count=100";
             // A phrase search often finds only other creators (tribute bands for "Phish"), and SameArtist decides
             // whether any result is this artist, so such an answer is believable, and cached, on its own. It is not
@@ -135,6 +136,26 @@ namespace Lidarr.Plugin.LiveMusicArchive.Core
         }
 
         /// <summary>
+        /// The creator search term: the <see cref="CreatorPhrase"/>, or-ed with the spellings archive.org also uses
+        /// for it. Tapers often leave out apostrophes ("Umphreys McGee") and write "and" for "&amp;" ("Phil Lesh and
+        /// Friends"); a phrase search finds neither from MusicBrainz's spelling.
+        /// </summary>
+        /// <param name="artistName">The artist name.</param>
+        /// <returns>A quoted phrase, or a parenthesised OR of quoted phrases.</returns>
+        internal static string CreatorQuery(string artistName)
+        {
+            var phrase = CreatorPhrase(artistName);
+            var phrases = new[]
+            {
+                phrase,
+                phrase.Replace("'", ""),
+                Regex.Replace(phrase, @"\s*&\s*", " and "),
+                Regex.Replace(phrase, @"\s+and\s+", " & ", RegexOptions.IgnoreCase)
+            }.Distinct(StringComparer.Ordinal).Select(p => $"\"{p}\"").ToList();
+            return phrases.Count == 1 ? phrases[0] : $"({string.Join(" OR ", phrases)})";
+        }
+
+        /// <summary>
         /// The field list for a scrape query, in an order derived from the query. On 2026-11-01 archive.org's
         /// scrape API cached responses by field list and ignored the query, so every query with the same fields got
         /// the first one's results. A per-query order keeps queries apart without extra requests; the order is
@@ -151,8 +172,8 @@ namespace Lidarr.Plugin.LiveMusicArchive.Core
         }
 
         /// <summary>
-        /// Whether an archive.org creator names the artist: equal once case, accents, punctuation, spacing and a
-        /// leading "The" are ignored. Phrase search alone also matches tribute acts ("Chum, A Tribute to Phish").
+        /// Whether an archive.org creator names the artist: equal once case, accents, punctuation, spacing, a
+        /// leading "The" and "&amp;" versus "and" are ignored. Phrase search alone also matches tribute acts ("Chum, A Tribute to Phish").
         /// </summary>
         /// <param name="creator">The item's creator field.</param>
         /// <param name="artistName">The artist name.</param>
@@ -219,7 +240,8 @@ namespace Lidarr.Plugin.LiveMusicArchive.Core
 
         private static string NormalizeName(string name)
         {
-            var decomposed = name.Trim().Normalize(NormalizationForm.FormD);
+            // "&" and "and" are the same word in band names ("Phil Lesh & Friends", "Phil Lesh and Friends").
+            var decomposed = name.Trim().Replace("&", "and").Normalize(NormalizationForm.FormD);
             var letters = new string(decomposed.Where(char.IsLetterOrDigit).Select(char.ToLowerInvariant).ToArray());
             return letters.StartsWith("the", StringComparison.Ordinal) && name.Trim().StartsWith("the ", StringComparison.OrdinalIgnoreCase)
                 ? letters[3..]
