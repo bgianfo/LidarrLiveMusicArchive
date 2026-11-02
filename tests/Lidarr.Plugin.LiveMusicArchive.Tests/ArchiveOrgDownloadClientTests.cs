@@ -221,11 +221,21 @@ namespace Lidarr.Plugin.LiveMusicArchive.Tests
         }
 
         [Fact]
-        public void download_ids_are_stable_per_recording_and_format()
+        public void download_ids_look_like_lma_ids() =>
+            Assert.Matches("^lma-[0-9a-f]{16}$", ArchiveOrgDownloadClient.NewDownloadId());
+
+        [Fact]
+        public async Task grabbing_a_release_again_starts_a_separate_download()
         {
-            Assert.Equal(ArchiveOrgDownloadClient.DownloadId("gd77", "Flac"), ArchiveOrgDownloadClient.DownloadId("gd77", "Flac"));
-            Assert.NotEqual(ArchiveOrgDownloadClient.DownloadId("gd77", "Flac"), ArchiveOrgDownloadClient.DownloadId("gd77", "VBR MP3"));
-            Assert.Matches("^lma-[0-9a-f]{16}$", ArchiveOrgDownloadClient.DownloadId("gd77", "Flac"));
+            // What Lidarr does after a failed import: grab the same release again, then remove the failed download.
+            var url = ReleaseOffers.DownloadUrl(TestData.SoundboardItem, "VBR MP3");
+            var first = await _downloadClient.Download(Remote(url), null);
+            var second = await _downloadClient.Download(Remote(url), null);
+
+            Assert.NotEqual(first, second);
+            var folders = Directory.GetDirectories(_root);
+            Assert.Equal(2, folders.Length);
+            Assert.Equal(new[] { first, second }.OrderBy(x => x), folders.Select(f => DownloadManifest.Load(f).DownloadId).OrderBy(x => x));
         }
 
         private static RemoteAlbum Remote(string url) => new() { Release = new ReleaseInfo { Title = "Grateful Dead - 1977-05-08: Barton Hall [SBD] [MP3 VBR V0]", DownloadUrl = url } };

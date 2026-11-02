@@ -1,5 +1,3 @@
-using System.Security.Cryptography;
-using System.Text;
 using FluentValidation.Results;
 using Lidarr.Plugin.LiveMusicArchive.Core;
 using Lidarr.Plugin.LiveMusicArchive.Core.Downloads;
@@ -70,7 +68,7 @@ namespace Lidarr.Plugin.LiveMusicArchive.Download
             var album = remoteAlbum.Albums?.FirstOrDefault();
             var manifest = new DownloadManifest
             {
-                DownloadId = DownloadId(identifier, format),
+                DownloadId = NewDownloadId(),
                 Title = release.Title,
                 Identifier = identifier,
                 Format = format,
@@ -178,12 +176,14 @@ namespace Lidarr.Plugin.LiveMusicArchive.Download
             return names.Distinct().ToDictionary(n => n, n => clashing.Contains(Path.GetFileName(n)) ? n.Replace('/', '_') : Path.GetFileName(n));
         }
 
-        /// <summary>A stable id for a recording in one format.</summary>
-        /// <param name="identifier">The archive.org identifier.</param>
-        /// <param name="format">The archive.org format.</param>
+        /// <summary>
+        /// A new id for one grab. Every grab gets its own, like any other download client's job id: when an import
+        /// fails, Lidarr (or a queue cleaner) removes the failed download and grabs the same release again, and with
+        /// a shared id the removal deleted the new download's folder, and Lidarr matched the new one against the
+        /// failed one's history.
+        /// </summary>
         /// <returns>"lma-" followed by 16 hex characters.</returns>
-        internal static string DownloadId(string identifier, string format) =>
-            "lma-" + Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes($"{identifier}|{format}")))[..16].ToLowerInvariant();
+        internal static string NewDownloadId() => "lma-" + Guid.NewGuid().ToString("N")[..16];
 
         /// <summary>A folder name for a download: the release title made file-system safe, plus the id.</summary>
         /// <param name="title">The release title.</param>
