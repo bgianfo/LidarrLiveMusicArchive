@@ -111,6 +111,27 @@ namespace Lidarr.Plugin.LiveMusicArchive.Tests
         }
 
         [Fact]
+        public void downloads_are_flat_because_lidarr_groups_albums_by_folder()
+        {
+            var files = ArchiveOrgDownloadClient.ManifestFiles(TestData.ShortenItem, AudioFiles.ForFormat(TestData.Item(TestData.ShortenItem), "VBR MP3"), isPluginShow: true);
+
+            Assert.Equal(19, files.Count);
+            Assert.All(files, f => Assert.DoesNotContain("/", f.LocalName));
+            Assert.Equal("dispatch1996-04-16d1t01.mp3", files[0].LocalName);
+            Assert.Equal("dispatch1996-04-16d1.shnf/dispatch1996-04-16d1t01.mp3", files[0].Name);
+        }
+
+        [Fact]
+        public void clashing_names_from_different_folders_stay_apart()
+        {
+            var names = ArchiveOrgDownloadClient.FlatNames(new[] { "set1/t01.flac", "set2/t01.flac", "t02.flac" });
+
+            Assert.Equal("set1_t01.flac", names["set1/t01.flac"]);
+            Assert.Equal("set2_t01.flac", names["set2/t01.flac"]);
+            Assert.Equal("t02.flac", names["t02.flac"]);
+        }
+
+        [Fact]
         public void musicbrainz_shows_get_no_recording_ids()
         {
             var item = TestData.Item(TestData.SoundboardItem);

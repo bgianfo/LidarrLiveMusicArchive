@@ -151,9 +151,11 @@ namespace Lidarr.Plugin.LiveMusicArchive.Download
         internal static List<ManifestFile> ManifestFiles(string identifier, IReadOnlyList<AudioFile> files, bool isPluginShow)
         {
             var tracks = ShowMapper.Tracks(identifier, null, files);
+            var localNames = FlatNames(files.Select(f => f.Name).ToList());
             return files.Zip(tracks, (f, t) => new ManifestFile
             {
                 Name = f.Name,
+                LocalName = localNames[f.Name],
                 Size = f.Size,
                 Md5 = f.Md5,
                 Title = t.TrackName,
@@ -161,6 +163,19 @@ namespace Lidarr.Plugin.LiveMusicArchive.Download
                 Disc = t.MediumNumber,
                 RecordingId = isPluginShow ? t.RecordingId : null
             }).ToList();
+        }
+
+        /// <summary>
+        /// Names for files in a flat download folder: the file's own name, or, where two sub-folders hold files of
+        /// the same name, the path with '/' replaced by '_'.
+        /// </summary>
+        /// <param name="names">The archive.org file names.</param>
+        /// <returns>The local name for each archive.org name.</returns>
+        internal static Dictionary<string, string> FlatNames(IReadOnlyList<string> names)
+        {
+            var clashing = names.GroupBy(n => Path.GetFileName(n), StringComparer.OrdinalIgnoreCase)
+                .Where(g => g.Count() > 1).Select(g => g.Key).ToHashSet(StringComparer.OrdinalIgnoreCase);
+            return names.Distinct().ToDictionary(n => n, n => clashing.Contains(Path.GetFileName(n)) ? n.Replace('/', '_') : Path.GetFileName(n));
         }
 
         /// <summary>A stable id for a recording in one format.</summary>
