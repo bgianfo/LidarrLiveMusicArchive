@@ -9,3 +9,4 @@ spikes/*/out/
 dist/
 coverage/
 coverage.cobertura.xml
+.e2e/
